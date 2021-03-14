@@ -5,7 +5,6 @@ authors = ["s1341 <github@shmarya.net>"]
 edition = "2018"
 description = "An implementatoin of Android Binder API for rust"
 repository = "https://github.com/s1341/binder-rust"
-license = "Apache 2.0"
 license-file = "LICENSE"
 keywords = ["binder", "android"]
 
