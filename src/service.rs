@@ -47,7 +47,6 @@ impl<'a> Service<'a> {
             .transact(self.handle, function_index, TransactionFlags::AcceptFds, &mut parcel);
 
         let status = parcel.read_u32();
-        println!("status: {}", &status);
         if status != 0 {
             panic!(
                 "service call failed with status: {:x}, {} - {}\n{}",
@@ -153,7 +152,6 @@ impl<'a> ServiceManager<'a> {
             TransactionFlags::empty(),
             &mut parcel,
         );
-        println!("res: {:?}\n{:?}", transaction, parcel);
         parcel.read_u32();
         let flat_object: BinderFlatObject = parcel.read_object();
 
@@ -181,14 +179,12 @@ impl<'a> ServiceManager<'a> {
         parcel.write_bool(allow_isolated);
         parcel.write_u32(dump_priority);
 
-        println!("parcel: {:?}", parcel);
         let (transaction, mut parcel) = self.binder.transact(
             SERVICE_MANAGER_HANDLE,
             ServiceManagerFunctions::AddService as u32,
             TransactionFlags::empty(),
             &mut parcel,
         );
-        println!("result: {:?}\n{:?}", transaction, parcel);
 
         ServiceListener::new(service_delegate, self, name, interface_name)
     }

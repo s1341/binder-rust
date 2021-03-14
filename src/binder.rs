@@ -302,8 +302,6 @@ impl Binder {
             binder_read_version(fd, &mut binder_version).expect("Failed to read binder version");
         }
 
-        println!("Binder version is {}", binder_version.protocol_version);
-
         let mut flags = MapFlags::empty();
         flags.set(MapFlags::MAP_PRIVATE, true);
         flags.set(MapFlags::MAP_NORESERVE, true);
@@ -392,7 +390,6 @@ impl Binder {
 
     pub fn reply(&mut self, data: &mut Parcel, flags: TransactionFlags) -> (Option<BinderTransactionData>, Parcel) {
 
-        println!("out_reply: {:?}", data);
         self.pending_out_data.write_i32(BinderDriverCommandProtocol::Reply as i32);
 
         let transaction_data_out = BinderTransactionData {
@@ -414,9 +411,7 @@ impl Binder {
 
     pub fn do_write_read(&mut self, parcel_out: &mut Parcel) -> (Option<BinderTransactionData>, Parcel) {
         self.pending_out_data.append_parcel(parcel_out);
-        println!("outgoing data: {:?}", self.pending_out_data);
         let mut parcel_in = self.write_read(&self.pending_out_data, true);
-        println!("parcel_in: {:?}", parcel_in);
         self.pending_out_data.reset();
 
         self.proccess_incoming(&mut parcel_in)
@@ -428,7 +423,6 @@ impl Binder {
         while parcel_in.has_unread_data() {
             let cmd_u32 = parcel_in.read_u32();
             let cmd_option = BinderDriverReturnProtocol::from_u32(cmd_u32);
-            println!("cmd is {:x}: {:?}", cmd_u32, cmd_option);
             match cmd_option {
                 Some(cmd) => match cmd {
                     BinderDriverReturnProtocol::TransactionComplete => {},
@@ -439,10 +433,8 @@ impl Binder {
                         panic!("Transaction failed");
                     },
                     BinderDriverReturnProtocol::IncRefs => {
-                        println!("IncRefs {:?}", parcel_in.read(0x10));
                     },
                     BinderDriverReturnProtocol::Acquire => {
-                        println!("Acquire {:?}", parcel_in.read(0x10));
                     },
                     BinderDriverReturnProtocol::AcquireResult => {
                         let result = parcel_in.read_i32();
@@ -453,16 +445,13 @@ impl Binder {
                         };
                     },
                     BinderDriverReturnProtocol::Reply | BinderDriverReturnProtocol::Transaction => {
-                        println!("Got a response!");
                         let transaction_data_in = parcel_in.read_transaction_data();
-                        println!("data: {:?}", transaction_data_in);
                         let parcel = Parcel::from_data_and_offsets(
                                 transaction_data_in.data,
                                 transaction_data_in.data_size as usize,
                                 transaction_data_in.offsets,
                                 transaction_data_in.offset_size as usize / size_of::<usize>()
                             );
-                        println!("{:?}", parcel);
                         return (
                             Some(transaction_data_in),
                             parcel,
@@ -472,10 +461,8 @@ impl Binder {
                         println!("Got an error {}", parcel_in.read_i32());
                     },
                     BinderDriverReturnProtocol::Noop => {
-                        println!("Got a NOOP");
                     },
                     BinderDriverReturnProtocol::SpawnLooper => {
-                        println!("Need to spawn a looper");
                     },
                     _  => {}
 
@@ -499,12 +486,9 @@ impl Binder {
             read_consumed: 0,
         };
 
-        println!("before write_read {}, {}", write_read_struct.write_size, write_read_struct.write_consumed);
         unsafe {
             binder_write_read(self.fd, &mut write_read_struct).expect("Failed to perform write_read");
         }
-        println!("after write_read {}, {}", write_read_struct.write_consumed, write_read_struct.read_consumed);
-        println!("response: {:?}", &data_in[..write_read_struct.read_consumed]);
         Parcel::from_slice(&data_in[..write_read_struct.read_consumed])
 
     }
