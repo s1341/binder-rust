@@ -392,6 +392,7 @@ impl Binder {
 
     pub fn reply(&mut self, data: &mut Parcel, flags: TransactionFlags) -> (Option<BinderTransactionData>, Parcel) {
 
+        println!("out_reply: {:?}", data);
         self.pending_out_data.write_i32(BinderDriverCommandProtocol::Reply as i32);
 
         let transaction_data_out = BinderTransactionData {
@@ -461,6 +462,7 @@ impl Binder {
                                 transaction_data_in.offsets,
                                 transaction_data_in.offset_size as usize / size_of::<usize>()
                             );
+                        println!("{:?}", parcel);
                         return (
                             Some(transaction_data_in),
                             parcel,

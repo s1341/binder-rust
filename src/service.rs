@@ -44,7 +44,7 @@ impl<'a> Service<'a> {
         let (_, mut parcel) = self
             .service_manager
             .binder
-            .transact(self.handle, function_index, TransactionFlags::empty(), &mut parcel);
+            .transact(self.handle, function_index, TransactionFlags::AcceptFds, &mut parcel);
 
         let status = parcel.read_u32();
         println!("status: {}", &status);
@@ -104,7 +104,7 @@ where
                                 let mut parcel = Parcel::empty();
                                 parcel.write_u32(0);
                                 parcel.write_str16(self.interface_name);
-                                self.service_manager.binder.reply(&mut parcel, transaction.flags());
+                                self.service_manager.binder.reply(&mut parcel, transaction.flags() | TransactionFlags::AcceptFds);
                             }
                             _ => {}
                         }
@@ -157,8 +157,8 @@ impl<'a> ServiceManager<'a> {
         parcel.read_u32();
         let flat_object: BinderFlatObject = parcel.read_object();
 
-        //self.binder.add_ref(flat_object.handle as i32);
-        //self.binder.acquire(flat_object.handle as i32);
+        self.binder.add_ref(flat_object.handle as i32);
+        self.binder.acquire(flat_object.handle as i32);
 
         Service::new(self, service_name, interface_name, flat_object.handle as i32)
     }
