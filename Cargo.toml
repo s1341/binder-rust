@@ -3,6 +3,12 @@ name = "binder-rust"
 version = "0.1.0"
 authors = ["s1341 <github@shmarya.net>"]
 edition = "2018"
+description = "An implementatoin of Android Binder API for rust"
+repository = "https://github.com/s1341/binder-rust"
+license = "Apache 2.0"
+license-file = "LICENSE"
+keywords = ["binder", "android"]
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,9 +18,6 @@ nix = "0.20.0"
 num-traits = "0.2"
 num-derive = "0.3"
 bitflags = "1.2.1"
-#ndk-glue = "0.3.0"
-#ndk = "0.3.0"
 
 [[example]]
 name = "myservice"
-#crate-type = ["cdylib"]
