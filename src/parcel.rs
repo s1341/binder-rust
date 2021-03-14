@@ -4,12 +4,13 @@ use std::{
     io::{Cursor, Read, Write},
     mem::size_of,
     mem::transmute,
+    os::unix::io::RawFd,
     slice,
 };
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
-use crate::{Binder, BinderDriverCommandProtocol, BinderTransactionData, BinderType};
+use crate::{Binder, BinderFlatObject, BinderTransactionData, BinderType};
 
 const STRICT_MODE_PENALTY_GATHER: i32 = 1 << 31;
 /// The header marker, packed["S", "Y", "S", "T"];
@@ -240,6 +241,24 @@ impl Parcel {
         }
 
         self.cursor.write(s16.as_slice());
+    }
+
+    /// Write a Binder object into the parcel
+    pub fn writeBinder(&mut self, object: *const c_void) {
+        self.write_object(BinderFlatObject::new(BinderType::Binder, object as usize, 0, 0));
+        self.write_u32(0xc); // stability  == SYSTEM
+    }
+
+    /// Write a file descriptor into the parcel
+    pub fn writeFileDescriptor(&mut self, fd: RawFd, take_ownership: bool) {
+        self.write_object(BinderFlatObject::new(BinderType::Fd, fd as usize, if take_ownership { 1 } else { 0 }, 0x17f));
+        //self.write_u32(0xc); // stability  == SYSTEM
+    }
+
+    pub fn readFileDescriptor(&mut self) -> RawFd {
+        let flat_object: BinderFlatObject = self.read_object();
+        assert!(flat_object.binder_type == BinderType::Fd);
+        flat_object.handle as RawFd
     }
 
     /// Read a string from the parcel

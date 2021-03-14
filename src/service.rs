@@ -3,7 +3,7 @@ use crate::{
     parcel::Parcel,
 };
 
-use std::cell::RefCell;
+use std::ffi::c_void;
 use std::marker::PhantomData;
 
 use num_traits::FromPrimitive;
@@ -177,8 +177,7 @@ impl<'a> ServiceManager<'a> {
         let mut parcel = Parcel::empty();
         parcel.write_interface_token(SERVICE_MANAGER_INTERFACE_TOKEN);
         parcel.write_str16(name);
-        parcel.write_object(BinderFlatObject::new(self as *const _ as usize, 0, 0));
-        parcel.write_u32(0xc); // stability  == SYSTEM
+        parcel.writeBinder(self as *const _ as *const c_void);
         parcel.write_bool(allow_isolated);
         parcel.write_u32(dump_priority);
 
