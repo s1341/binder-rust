@@ -1,5 +1,5 @@
 use crate::{
-    binder::{Binder, BinderFlatObject, BinderTransactionData, Transaction},
+    binder::{Binder, BinderFlatObject, Transaction, TransactionFlags},
     parcel::Parcel,
 };
 
@@ -44,9 +44,10 @@ impl<'a> Service<'a> {
         let (_, mut parcel) = self
             .service_manager
             .binder
-            .transact(self.handle, function_index, 0, &mut parcel);
+            .transact(self.handle, function_index, TransactionFlags::empty(), &mut parcel);
 
         let status = parcel.read_u32();
+        println!("status: {}", &status);
         if status != 0 {
             panic!(
                 "service call failed with status: {:x}, {} - {}\n{}",
@@ -101,6 +102,7 @@ where
                         match Transaction::from_u32(transaction.code()) {
                             Interface => {
                                 let mut parcel = Parcel::empty();
+                                parcel.write_u32(0);
                                 parcel.write_str16(self.interface_name);
                                 self.service_manager.binder.reply(&mut parcel, transaction.flags());
                             }
@@ -136,7 +138,7 @@ impl<'a> ServiceManager<'a> {
         self.binder.transact(
             SERVICE_MANAGER_HANDLE,
             Transaction::Ping as u32,
-            0,
+            TransactionFlags::empty(),
             &mut parcel,
         );
     }
@@ -148,15 +150,15 @@ impl<'a> ServiceManager<'a> {
         let (transaction, mut parcel) = self.binder.transact(
             SERVICE_MANAGER_HANDLE,
             ServiceManagerFunctions::GetService as u32,
-            0,
+            TransactionFlags::empty(),
             &mut parcel,
         );
         println!("res: {:?}\n{:?}", transaction, parcel);
         parcel.read_u32();
         let flat_object: BinderFlatObject = parcel.read_object();
 
-        self.binder.add_ref(flat_object.handle as i32);
-        self.binder.acquire(flat_object.handle as i32);
+        //self.binder.add_ref(flat_object.handle as i32);
+        //self.binder.acquire(flat_object.handle as i32);
 
         Service::new(self, service_name, interface_name, flat_object.handle as i32)
     }
@@ -184,7 +186,7 @@ impl<'a> ServiceManager<'a> {
         let (transaction, mut parcel) = self.binder.transact(
             SERVICE_MANAGER_HANDLE,
             ServiceManagerFunctions::AddService as u32,
-            0,
+            TransactionFlags::empty(),
             &mut parcel,
         );
         println!("result: {:?}\n{:?}", transaction, parcel);

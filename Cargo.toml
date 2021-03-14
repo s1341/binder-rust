@@ -11,6 +11,10 @@ byteorder = "1.4.3"
 nix = "0.20.0"
 num-traits = "0.2"
 num-derive = "0.3"
+bitflags = "1.2.1"
+#ndk-glue = "0.3.0"
+#ndk = "0.3.0"
 
-
-[examples]
+[[example]]
+name = "myservice"
+#crate-type = ["cdylib"]

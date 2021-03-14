@@ -21,14 +21,7 @@ use nix::{
     unistd::close,
 };
 
-use std::{
-    convert::TryFrom,
-    ffi::c_void,
-    mem::size_of,
-    os::unix::io::RawFd,
-    ptr,
-    slice,
-};
+use std::{convert::TryFrom, ffi::c_void, mem::size_of, ops::BitOr, os::unix::io::RawFd, ptr, slice};
 
 use num_traits::FromPrimitive;
 
@@ -163,8 +156,8 @@ impl BinderTransactionData {
         self.target
     }
 
-    pub fn flags(&self) -> u32 {
-        self.flags
+    pub fn flags(&self) -> TransactionFlags {
+        TransactionFlags::from_bits(self.flags).unwrap()
     }
 }
 
@@ -177,13 +170,14 @@ ioctl_readwrite!(binder_write_read, b'b', 1, BinderWriteRead);
 ioctl_write_ptr!(binder_set_max_threads, b'b', 5, u32);
 ioctl_readwrite!(binder_read_version, b'b', 9, BinderVersion);
 
-#[repr(u32)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum TransactionFlags {
-    ONE_WAY = 1,
-    ROOT_OBJECT = 4,
-    STATUS_CODE = 8,
-    ACCEPT_FDS = 16,
+bitflags! {
+    pub struct TransactionFlags: u32 {
+        const OneWay = 1;
+        const RootObject = 4;
+        const StatusCode = 8;
+        const AcceptFds = 0x10;
+        const ClearBuf = 0x20;
+    }
 }
 
 macro_rules! _iow {
@@ -372,14 +366,14 @@ impl Binder {
         self.pending_out_data.write_i32(handle);
     }
 
-    pub fn transact(&mut self, handle: i32, code: u32, flags: u32, data: &mut Parcel) -> (Option<BinderTransactionData>, Parcel) {
+    pub fn transact(&mut self, handle: i32, code: u32, flags: TransactionFlags, data: &mut Parcel) -> (Option<BinderTransactionData>, Parcel) {
 
         self.pending_out_data.write_i32(BinderDriverCommandProtocol::Transaction as i32);
 
         let transaction_data_out = BinderTransactionData {
             target: handle as u32,
             code,
-            flags: flags as u32,
+            flags: (TransactionFlags::AcceptFds | flags).bits,
             cookie: 0,
             sender_pid: 0,
             sender_euid: 0,
@@ -393,14 +387,14 @@ impl Binder {
         self.do_write_read(&mut Parcel::empty())
     }
 
-    pub fn reply(&mut self, data: &mut Parcel, flags: u32) -> (Option<BinderTransactionData>, Parcel) {
+    pub fn reply(&mut self, data: &mut Parcel, flags: TransactionFlags) -> (Option<BinderTransactionData>, Parcel) {
 
         self.pending_out_data.write_i32(BinderDriverCommandProtocol::Reply as i32);
 
         let transaction_data_out = BinderTransactionData {
             target: 0xffffffff,
             code: 0,
-            flags,
+            flags: flags.bits,
             cookie: 0,
             sender_pid: 0,
             sender_euid: 0,
