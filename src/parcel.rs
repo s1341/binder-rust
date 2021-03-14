@@ -244,18 +244,19 @@ impl Parcel {
     }
 
     /// Write a Binder object into the parcel
-    pub fn writeBinder(&mut self, object: *const c_void) {
+    pub fn write_binder(&mut self, object: *const c_void) {
         self.write_object(BinderFlatObject::new(BinderType::Binder, object as usize, 0, 0));
         self.write_u32(0xc); // stability  == SYSTEM
     }
 
     /// Write a file descriptor into the parcel
-    pub fn writeFileDescriptor(&mut self, fd: RawFd, take_ownership: bool) {
+    pub fn write_file_descriptor(&mut self, fd: RawFd, take_ownership: bool) {
         self.write_object(BinderFlatObject::new(BinderType::Fd, fd as usize, if take_ownership { 1 } else { 0 }, 0x17f));
         //self.write_u32(0xc); // stability  == SYSTEM
     }
 
-    pub fn readFileDescriptor(&mut self) -> RawFd {
+    /// REad a file descriptor from the parcel
+    pub fn read_file_descriptor(&mut self) -> RawFd {
         let flat_object: BinderFlatObject = self.read_object();
         assert!(flat_object.binder_type == BinderType::Fd);
         flat_object.handle as RawFd

@@ -177,7 +177,7 @@ impl<'a> ServiceManager<'a> {
         let mut parcel = Parcel::empty();
         parcel.write_interface_token(SERVICE_MANAGER_INTERFACE_TOKEN);
         parcel.write_str16(name);
-        parcel.writeBinder(self as *const _ as *const c_void);
+        parcel.write_binder(self as *const _ as *const c_void);
         parcel.write_bool(allow_isolated);
         parcel.write_u32(dump_priority);
 
