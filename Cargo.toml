@@ -1,6 +1,6 @@
 [package]
 name = "binder-rust"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["s1341 <github@shmarya.net>"]
 edition = "2018"
 description = "An implementatoin of Android Binder API for rust"
