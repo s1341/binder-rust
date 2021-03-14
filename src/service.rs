@@ -1,10 +1,12 @@
 use crate::{
-    binder::{Binder, BinderFlatObject, Transaction},
+    binder::{Binder, BinderFlatObject, BinderTransactionData, Transaction},
     parcel::Parcel,
 };
 
 use std::cell::RefCell;
 use std::marker::PhantomData;
+
+use num_traits::FromPrimitive;
 
 const SERVICE_MANAGER_HANDLE: i32 = 0;
 const SERVICE_MANAGER_INTERFACE_TOKEN: &str = "android.os.IServiceManager";
@@ -36,10 +38,10 @@ impl<'a> Service<'a> {
         let mut parcel = Parcel::empty();
         parcel.write_interface_token(self.interface_name);
         if data.len() > 0 {
-            parcel.write(data.to_slice());
+            parcel.append_parcel(data);
         };
 
-        let mut parcel = self
+        let (_, mut parcel) = self
             .service_manager
             .binder
             .transact(self.handle, function_index, 0, &mut parcel);
@@ -59,20 +61,57 @@ impl<'a> Service<'a> {
     }
 }
 
-pub struct ServiceListener<'a> {
-    service_manager: &'a ServiceManager<'a>,
+pub trait BinderService {
+    fn process_request(&self, code: u32, data: &mut Parcel) -> Parcel;
+}
+
+pub struct ServiceListener<'a, BS>
+where
+    BS: BinderService,
+{
+    service_delegate: &'a BS,
+    service_manager: &'a mut ServiceManager<'a>,
     name: &'a str,
     interface_name: &'a str,
 }
 
-impl<'a> ServiceListener<'a> {
-    pub fn new(service_manager: &'a ServiceManager<'a>, name: &'a str, interface_name: &'a str) -> Self {
+impl<'a, BS> ServiceListener<'a, BS>
+where
+    BS: BinderService,
+{
+    pub fn new(service_delegate: &'a BS, service_manager: &'a mut ServiceManager<'a>, name: &'a str, interface_name: &'a str) -> Self {
         Self {
+            service_delegate,
             service_manager,
             name,
             interface_name,
         }
     }
+
+    pub fn run(&mut self){
+        loop {
+
+            let (transaction, mut parcel) = self.service_manager.binder.do_write_read(&mut Parcel::empty());
+            match transaction {
+                Some(transaction) => {
+                    if transaction.code() >= Transaction::FirstCall as u32 && transaction.code() <= Transaction::LastCall as u32 {
+                        assert!(&parcel.read_interface_token() == self.interface_name);
+                        self.service_manager.binder.reply(&mut self.service_delegate.process_request(transaction.code(), &mut parcel), transaction.flags());
+                    } else {
+                        match Transaction::from_u32(transaction.code()) {
+                            Interface => {
+                                let mut parcel = Parcel::empty();
+                                parcel.write_str16(self.interface_name);
+                                self.service_manager.binder.reply(&mut parcel, transaction.flags());
+                            }
+                            _ => {}
+                        }
+                    }
+                },
+                None => {}
+            }
+        }
+        }
 }
 
 pub struct ServiceManager<'a> {
@@ -106,15 +145,15 @@ impl<'a> ServiceManager<'a> {
         let mut parcel = Parcel::empty();
         parcel.write_interface_token(SERVICE_MANAGER_INTERFACE_TOKEN);
         parcel.write_str16(service_name);
-        let mut result = self.binder.transact(
+        let (transaction, mut parcel) = self.binder.transact(
             SERVICE_MANAGER_HANDLE,
             ServiceManagerFunctions::GetService as u32,
             0,
             &mut parcel,
         );
-        println!("res: {:?}", result);
-        result.read_u32();
-        let flat_object: BinderFlatObject = result.read_object();
+        println!("res: {:?}\n{:?}", transaction, parcel);
+        parcel.read_u32();
+        let flat_object: BinderFlatObject = parcel.read_object();
 
         self.binder.add_ref(flat_object.handle as i32);
         self.binder.acquire(flat_object.handle as i32);
@@ -122,13 +161,14 @@ impl<'a> ServiceManager<'a> {
         Service::new(self, service_name, interface_name, flat_object.handle as i32)
     }
 
-    pub fn register_service(
+    pub fn register_service<BS: BinderService>(
         &'a mut self,
+        service_delegate: &'a BS,
         name: &'a str,
         interface_name: &'a str,
         allow_isolated: bool,
         dump_priority: u32,
-    ) -> ServiceListener<'a> {
+    ) -> ServiceListener<'a, BS> {
 
         self.binder.enter_looper();
 
@@ -136,18 +176,19 @@ impl<'a> ServiceManager<'a> {
         parcel.write_interface_token(SERVICE_MANAGER_INTERFACE_TOKEN);
         parcel.write_str16(name);
         parcel.write_object(BinderFlatObject::new(self as *const _ as usize, 0, 0));
+        parcel.write_u32(0xc); // stability  == SYSTEM
         parcel.write_bool(allow_isolated);
         parcel.write_u32(dump_priority);
 
         println!("parcel: {:?}", parcel);
-        let mut result = self.binder.transact(
+        let (transaction, mut parcel) = self.binder.transact(
             SERVICE_MANAGER_HANDLE,
             ServiceManagerFunctions::AddService as u32,
             0,
             &mut parcel,
         );
-        println!("result: {:?}", result);
+        println!("result: {:?}\n{:?}", transaction, parcel);
 
-        ServiceListener::new(self , name, interface_name)
+        ServiceListener::new(service_delegate, self, name, interface_name)
     }
 }

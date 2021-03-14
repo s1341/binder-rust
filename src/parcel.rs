@@ -71,6 +71,16 @@ impl Parcel {
         self.objects_position = 0;
         self.object_offsets.resize(0, 0);
     }
+
+    /// Append the contents of another parcel to this parcel
+    pub fn append_parcel(&mut self, other: &mut Parcel) {
+        let current_position = self.cursor.position();
+        self.cursor.write(other.to_slice());
+        for offset in &other.object_offsets {
+            self.object_offsets.push(offset + current_position as usize);
+        }
+    }
+
     /// Retrieve the data of the parcel as a pointer
     pub fn as_ptr(&self) -> *const u8 {
         self.cursor.get_ref().as_ptr()
@@ -237,9 +247,20 @@ impl Parcel {
         let len = ((self.read_i32() + 1) * 2) as usize;
         unsafe {
             let u16_array = slice::from_raw_parts(self.read(len).as_mut_ptr() as *mut u16, len);
-            String::from_utf16(u16_array).unwrap()
+            let mut res = String::from_utf16(u16_array).unwrap();
+            res.truncate(len / 2 - 1);
+            res
         }
     }
+
+    /// Read an interface token from the parcel
+    pub fn read_interface_token(&mut self) -> String {
+        assert!(self.read_i32() == STRICT_MODE_PENALTY_GATHER);
+        assert!(self.read_i32() == -1);
+        assert!(self.read_i32() == HEADER);
+        self.read_str16()
+    }
+
 
     /// Write an interface token to the parcel
     pub fn write_interface_token(&mut self, name: &str) {
