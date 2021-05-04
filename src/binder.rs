@@ -67,7 +67,7 @@ pub enum BinderType {
 
 #[repr(C)]
 #[derive(Debug)]
-pub(crate) struct BinderFlatObject {
+pub struct BinderFlatObject {
     pub(crate) binder_type: BinderType,
     flags: u32,
     pub(crate) handle: *const c_void,
@@ -83,6 +83,14 @@ impl BinderFlatObject {
             cookie: cookie as *const c_void,
         }
 
+    }
+
+    pub fn handle(&self) -> *const c_void {
+        self.handle
+    }
+
+    pub fn cookie(&self) -> *const c_void {
+        self.cookie
     }
 }
 
@@ -129,6 +137,27 @@ pub struct BinderWriteRead {
     read_buffer: *mut c_void,
 }
 
+impl BinderWriteRead {
+    pub fn write_size (&self) -> usize {
+        self.write_size
+    }
+    pub fn write_consumed (&self) -> usize {
+        self.write_consumed
+    }
+    pub fn read_size (&self) -> usize {
+        self.read_size
+    }
+    pub fn read_consumed (&self) -> usize {
+        self.read_consumed
+    }
+    pub fn write_buffer (&self) -> *const c_void {
+
+        self.write_buffer
+    }
+    pub fn read_buffer (&self) -> *mut c_void {
+        self.read_buffer
+    }
+}
 #[repr(C)]
 pub(crate) struct BinderTransactionDataData {
 }
@@ -162,6 +191,14 @@ impl BinderTransactionData {
     pub fn flags(&self) -> TransactionFlags {
         TransactionFlags::from_bits(self.flags).unwrap()
     }
+
+    pub unsafe fn raw_data(&self) -> &[u8] {
+        std::slice::from_raw_parts(self.data, self.data_size as usize)
+    }
+
+    pub fn parcel(&self) -> Parcel {
+        unsafe { Parcel::from_slice(self.raw_data()) }
+    }
 }
 
 enum Result {
@@ -176,6 +213,7 @@ ioctl_readwrite!(binder_read_version, b'b', 9, BinderVersion);
 bitflags! {
     pub struct TransactionFlags: u32 {
         const OneWay = 1;
+        const CollectNotedAppOps = 2;
         const RootObject = 4;
         const StatusCode = 8;
         const AcceptFds = 0x10;
@@ -209,8 +247,8 @@ const BC_INCREFS: u32 = _iow!(b'c', 4, 0x4);
 const BC_ACQUIRE: u32 = _iow!(b'c', 5, 0x4);
 const BC_RELEASE: u32 = _iow!(b'c', 6, 0x4);
 const BC_DECREFS: u32 = _iow!(b'c', 7, 0x4);
-const BC_INCREFS_DONE: u32 = _iow!(b'c', 8, 0x8);
-const BC_ACQUIRE_DONE: u32 = _iow!(b'c', 9, 0x8);
+const BC_INCREFS_DONE: u32 = _iow!(b'c', 8, 0x10);
+const BC_ACQUIRE_DONE: u32 = _iow!(b'c', 9, 0x10);
 const BC_ATTEMPT_ACQUIRE: u32 = _iow!(b'c', 10, 0x10);
 const BC_REGISTER_LOOPER: u32 = 25355;
 const BC_ENTER_LOOPER: u32 = 25356;
@@ -240,6 +278,13 @@ pub enum BinderDriverCommandProtocol {
     ClearDeathNotification = BC_CLEAR_DEATH_NOTIFICATION,
     DeadBinderDone = BC_DEAD_BINDER_DONE,
 }
+
+impl From<u32> for BinderDriverCommandProtocol {
+    fn from(int: u32) -> Self {
+        BinderDriverCommandProtocol::from_u32(int).unwrap()
+    }
+}
+
 const BR_ERROR: u32 = _ior!(b'r', 0, 4);
 const BR_OK: u32 = _ior!(b'r', 1, 0);
 const BR_TRANSACTION: u32 = _ior!(b'r', 2, 0x40);
@@ -280,6 +325,12 @@ pub enum BinderDriverReturnProtocol {
     DeadBinder = BR_DEAD_BINDER,
     ClearDeathNotification = BR_CLEAR_DEATH_NOTIFICATION_DONE,
     FailedReply = BR_FAILED_REPLY,
+}
+
+impl From<u32> for BinderDriverReturnProtocol {
+    fn from(int: u32) -> Self {
+        BinderDriverReturnProtocol::from_u32(int).unwrap()
+    }
 }
 
 /// Structure representing an open Binder interface.

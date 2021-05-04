@@ -73,6 +73,14 @@ impl Parcel {
         self.object_offsets.resize(0, 0);
     }
 
+    pub fn position(&self) -> u64 {
+        self.cursor.position()
+    }
+
+    pub fn set_position(&mut self, pos: u64) {
+        self.cursor.set_position(pos)
+    }
+
     /// Append the contents of another parcel to this parcel
     pub fn append_parcel(&mut self, other: &mut Parcel) {
         let current_position = self.cursor.position();
@@ -198,6 +206,12 @@ impl Parcel {
         self.cursor.read(&mut data);
         data
     }
+    /// Read a slice of size bytes from the parcel
+    pub fn read_without_alignment(&mut self, size: usize) -> Vec<u8> {
+        let mut data = vec![0u8; size];
+        self.cursor.read(&mut data);
+        data
+    }
 
     /// Read a BinderTransactionData from the parcel
     pub fn read_transaction_data(&mut self) -> BinderTransactionData {
@@ -265,10 +279,27 @@ impl Parcel {
     /// Read a string from the parcel
     pub fn read_str16(&mut self) -> String {
         let len = ((self.read_i32() + 1) * 2) as usize;
+        if len == 0 {
+            return "".to_string()
+        }
         unsafe {
             let u16_array = slice::from_raw_parts(self.read(len).as_mut_ptr() as *mut u16, len);
             let mut res = String::from_utf16(u16_array).unwrap();
             res.truncate(len / 2 - 1);
+            res
+        }
+    }
+
+    /// Read a string from the parcel
+    pub fn read_str(&mut self) -> String {
+        let len = (self.read_i32() + 1) as usize;
+        if len == 0 {
+            return "".to_string()
+        }
+        unsafe {
+            let u8_array = slice::from_raw_parts(self.read(len).as_mut_ptr() as *mut u8, len);
+            let mut res = String::from_utf8(u8_array.to_vec()).unwrap();
+            res.truncate(len - 1);
             res
         }
     }
