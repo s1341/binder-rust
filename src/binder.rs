@@ -25,7 +25,6 @@ use std::{convert::TryFrom, ffi::c_void, mem::size_of, ops::BitOr, os::unix::io:
 
 use num_traits::FromPrimitive;
 
-
 /// The binder device name
 const DEVICE: &str = "/dev/binder";
 
@@ -250,12 +249,14 @@ const BC_DECREFS: u32 = _iow!(b'c', 7, 0x4);
 const BC_INCREFS_DONE: u32 = _iow!(b'c', 8, 0x10);
 const BC_ACQUIRE_DONE: u32 = _iow!(b'c', 9, 0x10);
 const BC_ATTEMPT_ACQUIRE: u32 = _iow!(b'c', 10, 0x10);
-const BC_REGISTER_LOOPER: u32 = 25355;
-const BC_ENTER_LOOPER: u32 = 25356;
-const BC_EXIT_LOOPER: u32 = 25357;
+const BC_REGISTER_LOOPER: u32 = _io!(b'c', 11);
+const BC_ENTER_LOOPER: u32 = _io!(b'c', 12);
+const BC_EXIT_LOOPER: u32 = _io!(b'c', 13);
 const BC_REQUEST_DEATH_NOTIFICATION: u32 = _iow!(b'c', 14, 0x10);
 const BC_CLEAR_DEATH_NOTIFICATION: u32 = _iow!(b'c', 15, 0x10);
 const BC_DEAD_BINDER_DONE: u32 = _iow!(b'c', 16, 0x8);
+const BC_TRANSACTION_SG: u32 = _iow!(b'c', 17, 0x48);
+const BC_REPLY_SG: u32 = _iow!(b'c', 18, 0x48);
 
 #[repr(u32)]
 #[derive(Debug, FromPrimitive)]
@@ -277,6 +278,8 @@ pub enum BinderDriverCommandProtocol {
     RequestDeathNotification = BC_REQUEST_DEATH_NOTIFICATION,
     ClearDeathNotification = BC_CLEAR_DEATH_NOTIFICATION,
     DeadBinderDone = BC_DEAD_BINDER_DONE,
+    TransactionSG = BC_TRANSACTION_SG,
+    ReplySG = BC_REPLY_SG,
 }
 
 impl From<u32> for BinderDriverCommandProtocol {
@@ -303,6 +306,8 @@ const BR_FINISHED: u32 = _io!(b'r', 14);
 const BR_DEAD_BINDER: u32 = _ior!(b'r', 15, 0x8);
 const BR_CLEAR_DEATH_NOTIFICATION_DONE: u32 = _ior!(b'r', 16, 0x10);
 const BR_FAILED_REPLY: u32 = _io!(b'r', 17);
+const BR_FROZEN_REPLY: u32 = _io!(b'r', 18);
+const BR_ONEWAY_SPAM_SUSPECT: u32 = _io!(b'r', 19);
 
 #[repr(u32)]
 #[derive(Debug, FromPrimitive, ToPrimitive)]
@@ -325,6 +330,8 @@ pub enum BinderDriverReturnProtocol {
     DeadBinder = BR_DEAD_BINDER,
     ClearDeathNotification = BR_CLEAR_DEATH_NOTIFICATION_DONE,
     FailedReply = BR_FAILED_REPLY,
+    FrozenReply = BR_FROZEN_REPLY,
+    OnwaySpamSuspect = BR_ONEWAY_SPAM_SUSPECT,
 }
 
 impl From<u32> for BinderDriverReturnProtocol {
