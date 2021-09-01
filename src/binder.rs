@@ -1,6 +1,5 @@
-use crate::{
-    parcel::Parcel
-};
+use parcelable_derive::Parcelable;
+use crate::{Error, Parcelable, parcel::Parcel};
 
 use nix::{
     fcntl::{
@@ -51,8 +50,8 @@ const TF_FD: u32 = pack_chars!(b'f', b'd', b'*', BINDER_TYPE_LARGE);
 const TF_FDA: u32 = pack_chars!(b'f', b'd', b'a', BINDER_TYPE_LARGE);
 const TF_PTR: u32 = pack_chars!(b'p', b't', b'*', BINDER_TYPE_LARGE);
 
-#[repr(u32)]
 #[derive(Debug, Hash, Clone, Copy, PartialEq, FromPrimitive)]
+#[repr(u32)]
 pub enum BinderType {
     Binder = TF_BINDER,
     WeakBinder = TF_WEAKBINDER,
@@ -62,15 +61,30 @@ pub enum BinderType {
     Fda = TF_FDA,
     Ptr = TF_PTR,
 }
+impl Parcelable for BinderType {
+    fn deserialize(parcel: &mut Parcel) -> Result<Self, crate::Error>
+    where Self: Sized {
+        Ok(match parcel.read_u32() {
+            TF_BINDER => BinderType::Binder,
+            TF_WEAKBINDER => BinderType::WeakBinder,
+            TF_HANDLE => BinderType::Handle,
+            TF_WEAKHANDLE => BinderType::WeakHandle,
+            TF_FD => BinderType::Fd,
+            TF_FDA => BinderType::Fda,
+            TF_PTR => BinderType::Ptr,
+            _ => { return Err(Error::BadEnumValue); }
+        })
+    }
+}
 
 
-#[repr(C)]
-#[derive(Debug)]
+#[derive(Parcelable, Debug)]
 pub struct BinderFlatObject {
     pub(crate) binder_type: BinderType,
     flags: u32,
-    pub(crate) handle: *const c_void,
-    cookie: *const c_void,
+    pub(crate) handle: usize,
+    cookie: usize,
+    unk: u32,
 }
 
 impl BinderFlatObject {
@@ -78,17 +92,18 @@ impl BinderFlatObject {
         Self {
             binder_type,
             flags,
-            handle: handle as *const c_void,
-            cookie: cookie as *const c_void,
+            handle,
+            cookie,
+            unk: 0xc,
         }
 
     }
 
-    pub fn handle(&self) -> *const c_void {
+    pub fn handle(&self) -> usize {
         self.handle
     }
 
-    pub fn cookie(&self) -> *const c_void {
+    pub fn cookie(&self) -> usize {
         self.cookie
     }
 }
@@ -200,7 +215,7 @@ impl BinderTransactionData {
     }
 }
 
-enum Result {
+enum BinderResult {
     InvalidOperation,
     NoError,
 }
@@ -476,7 +491,7 @@ impl Binder {
     }
 
     fn proccess_incoming(&mut self, parcel_in: &mut Parcel) -> (Option<BinderTransactionData>, Parcel) {
-        let mut acquire_result = Result::NoError;
+        let mut acquire_result = BinderResult::NoError;
 
         while parcel_in.has_unread_data() {
             let cmd_u32 = parcel_in.read_u32();
@@ -497,9 +512,9 @@ impl Binder {
                     BinderDriverReturnProtocol::AcquireResult => {
                         let result = parcel_in.read_i32();
                         acquire_result = if result == 0 {
-                            Result::InvalidOperation
+                            BinderResult::InvalidOperation
                         } else {
-                            Result::NoError
+                            BinderResult::NoError
                         };
                     },
                     BinderDriverReturnProtocol::Reply | BinderDriverReturnProtocol::Transaction => {
@@ -563,3 +578,4 @@ impl Drop for Binder {
         close(self.fd);
     }
 }
+

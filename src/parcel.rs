@@ -126,10 +126,20 @@ impl Parcel {
 
     /// Write an i32 to the parcel
     pub fn write_i32(&mut self, data: i32) {
+        //if self.cursor.position() % 4 != 0 {
+            //for _ in 0..(4 - (self.cursor.position() % 4)) {
+                //self.cursor.write_u8(0);
+            //}
+        //}
         self.cursor.write_i32::<LittleEndian>(data);
     }
     /// Write an u32 to the parcel
     pub fn write_u32(&mut self, data: u32) {
+        //if self.cursor.position() % 4 != 0 {
+            //for _ in 0..(4 - (self.cursor.position() % 4)) {
+                //self.cursor.write_u8(0);
+            //}
+        //}
         self.cursor.write_u32::<LittleEndian>(data);
     }
     /// Write an u16 to the parcel
@@ -139,11 +149,16 @@ impl Parcel {
 
     /// Write a bool to the parcel
     pub fn write_bool(&mut self, data: bool) {
-        self.cursor.write_u32::<LittleEndian>(data as u32);
+        self.write_u32(data as u32)
     }
 
     /// Read an i32 from the parcel
     pub fn read_i32(&mut self) -> i32 {
+        //if self.cursor.position() % 4 != 0 {
+            //for _ in 0..(4 - (self.cursor.position() % 4)) {
+                //self.cursor.read_u8();
+            //}
+        //}
         self.cursor.read_i32::<LittleEndian>().unwrap()
     }
 
@@ -171,13 +186,33 @@ impl Parcel {
         });
     }
 
+    /// Read an u8 from the parcel
+    pub fn read_u8(&mut self) -> u8 {
+        self.cursor.read_u8().unwrap()
+    }
+
+    /// Read an u16 from the parcel
+    pub fn read_u16(&mut self) -> u16 {
+        self.cursor.read_u16::<LittleEndian>().unwrap()
+    }
+
     /// Read an u32 from the parcel
     pub fn read_u32(&mut self) -> u32 {
+        if self.cursor.position() % 4 != 0 {
+            for _ in 0..(4 - (self.cursor.position() % 4)) {
+                self.cursor.read_u8();
+            }
+        }
         self.cursor.read_u32::<LittleEndian>().unwrap()
     }
 
     /// Read an u64 from the parcel
     pub fn read_u64(&mut self) -> u64 {
+        if self.cursor.position() % 4 != 0 {
+            for _ in 0..(4 - (self.cursor.position() % 4)) {
+                self.cursor.read_u8();
+            }
+        }
         self.cursor.read_u64::<LittleEndian>().unwrap()
     }
 
@@ -278,14 +313,14 @@ impl Parcel {
 
     /// Read a string from the parcel
     pub fn read_str16(&mut self) -> String {
-        let len = ((self.read_i32() + 1) * 2) as usize;
+        let len = (self.read_i32() + 1) as usize;
         if len == 0 {
             return "".to_string()
         }
         unsafe {
-            let u16_array = slice::from_raw_parts(self.read(len).as_mut_ptr() as *mut u16, len);
-            let mut res = String::from_utf16(u16_array).unwrap();
-            res.truncate(len / 2 - 1);
+            let u16_array: Vec<u16> = self.read(len * 2).chunks_exact(2).into_iter().map(|a| u16::from_ne_bytes([a[0], a[1]])).collect();
+            let mut res = String::from_utf16(&u16_array).unwrap();
+            res.truncate(len - 1);
             res
         }
     }
@@ -297,8 +332,8 @@ impl Parcel {
             return "".to_string()
         }
         unsafe {
-            let u8_array = slice::from_raw_parts(self.read(len).as_mut_ptr() as *mut u8, len);
-            let mut res = String::from_utf8(u8_array.to_vec()).unwrap();
+            let u8_array = self.read(len);
+            let mut res = String::from_utf8(u8_array).unwrap();
             res.truncate(len - 1);
             res
         }
@@ -306,7 +341,8 @@ impl Parcel {
 
     /// Read an interface token from the parcel
     pub fn read_interface_token(&mut self) -> String {
-        assert!(self.read_i32() == STRICT_MODE_PENALTY_GATHER);
+        //assert!(self.read_i32() == STRICT_MODE_PENALTY_GATHER);
+        self.read_i32();
         assert!(self.read_i32() == -1);
         assert!(self.read_i32() == HEADER);
         self.read_str16()

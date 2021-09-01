@@ -12,11 +12,14 @@ keywords = ["binder", "android"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+parcelable_derive = { path = "parcelable_derive/" }
 byteorder = "1.4.3"
 nix = "0.20.0"
 num-traits = "0.2"
 num-derive = "0.3"
 bitflags = "1.2.1"
+log = "0.4"
+thiserror = "*"
 
 [[example]]
 name = "myservice"
