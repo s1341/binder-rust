@@ -21,6 +21,12 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("stdio error")]
+    StdioError(#[from] std::io::Error),
+    #[error("utf error")]
+    Utf16Error(#[from] std::string::FromUtf16Error),
+    #[error("utf error")]
+    Utf8Error(#[from] std::string::FromUtf8Error),
     #[error("deserialization error")]
     DeserializationError,
     #[error("bad enum value")]

@@ -20,7 +20,7 @@ use nix::{
     unistd::close,
 };
 
-use std::{convert::TryFrom, ffi::c_void, mem::size_of, ops::BitOr, os::unix::io::RawFd, ptr, slice};
+use std::{convert::{TryFrom, TryInto}, ffi::c_void, mem::size_of, ops::BitOr, os::unix::io::RawFd, ptr, slice};
 
 use num_traits::FromPrimitive;
 
@@ -64,7 +64,7 @@ pub enum BinderType {
 impl Parcelable for BinderType {
     fn deserialize(parcel: &mut Parcel) -> Result<Self, crate::Error>
     where Self: Sized {
-        Ok(match parcel.read_u32() {
+        Ok(match parcel.read_u32()? {
             TF_BINDER => BinderType::Binder,
             TF_WEAKBINDER => BinderType::WeakBinder,
             TF_HANDLE => BinderType::Handle,
@@ -75,6 +75,11 @@ impl Parcelable for BinderType {
             _ => { return Err(Error::BadEnumValue); }
         })
     }
+
+    fn serialize(&self, parcel: &mut Parcel) -> Result<(), Error> {
+        parcel.write_u32(*self as u32)?;
+        Ok(())
+    }
 }
 
 
@@ -84,7 +89,7 @@ pub struct BinderFlatObject {
     flags: u32,
     pub(crate) handle: usize,
     cookie: usize,
-    unk: u32,
+    stability: u32,// stability  == SYSTEM
 }
 
 impl BinderFlatObject {
@@ -94,7 +99,7 @@ impl BinderFlatObject {
             flags,
             handle,
             cookie,
-            unk: 0xc,
+            stability: 0xc, // == SYSTEM
         }
 
     }
@@ -395,54 +400,61 @@ impl Binder {
     }
 
     /// Tell binder that we are entering the looper
-    pub fn enter_looper(&self) {
+    pub fn enter_looper(&self) -> Result<(), Error> {
         let mut parcel_out = Parcel::empty();
 
-        parcel_out.write_i32(BinderDriverCommandProtocol::EnterLooper as i32);
+        parcel_out.write_i32(BinderDriverCommandProtocol::EnterLooper as i32)?;
 
         self.write_read(&parcel_out, false);
+        Ok(())
     }
 
     /// Tell binder that we are exiting the looper
-    fn exit_looper(&self) {
+    fn exit_looper(&self) -> Result<(), Error> {
         let mut parcel_out = Parcel::empty();
 
-        parcel_out.write_i32(BinderDriverCommandProtocol::ExitLooper as i32);
+        parcel_out.write_i32(BinderDriverCommandProtocol::ExitLooper as i32)?;
 
         self.write_read(&parcel_out, false);
+        Ok(())
     }
 
     /// Increment the server side reference count of the given handle. Note that this request is
     /// queued and only actually perfomed with the next outgoing transaction.
-    pub fn add_ref(&mut self, handle: i32) {
-        self.pending_out_data.write_u32(BinderDriverCommandProtocol::IncRefs as u32);
-        self.pending_out_data.write_i32(handle);
+    pub fn add_ref(&mut self, handle: i32) -> Result<(), Error> {
+        self.pending_out_data.write_u32(BinderDriverCommandProtocol::IncRefs as u32)?;
+        self.pending_out_data.write_i32(handle)?;
+
+        Ok(())
     }
 
     /// Decrement the server side reference count of the given handle. Note that this request is
     /// queued and only actually perfomed with the next outgoing transaction.
-    pub fn dec_ref(&mut self, handle: i32) {
-        self.pending_out_data.write_u32(BinderDriverCommandProtocol::DecRefs as u32);
-        self.pending_out_data.write_i32(handle);
+    pub fn dec_ref(&mut self, handle: i32) -> Result<(), Error> {
+        self.pending_out_data.write_u32(BinderDriverCommandProtocol::DecRefs as u32)?;
+        self.pending_out_data.write_i32(handle)?;
+        Ok(())
     }
 
     /// Acquire the server side resource for the given handle. Note that this request is
     /// queued and only actually perfomed with the next outgoing transaction.
-    pub fn acquire(&mut self, handle: i32) {
-        self.pending_out_data.write_u32(BinderDriverCommandProtocol::Acquire as u32);
-        self.pending_out_data.write_i32(handle);
+    pub fn acquire(&mut self, handle: i32) -> Result<(), Error> {
+        self.pending_out_data.write_u32(BinderDriverCommandProtocol::Acquire as u32)?;
+        self.pending_out_data.write_i32(handle)?;
+        Ok(())
     }
 
     /// Release the server side resource for the given handle. Note that this request is
     /// queued and only actually perfomed with the next outgoing transaction.
-    pub fn release(&mut self, handle: i32) {
-        self.pending_out_data.write_u32(BinderDriverCommandProtocol::Release as u32);
-        self.pending_out_data.write_i32(handle);
+    pub fn release(&mut self, handle: i32) -> Result<(), Error> {
+        self.pending_out_data.write_u32(BinderDriverCommandProtocol::Release as u32)?;
+        self.pending_out_data.write_i32(handle)?;
+        Ok(())
     }
 
-    pub fn transact(&mut self, handle: i32, code: u32, flags: TransactionFlags, data: &mut Parcel) -> (Option<BinderTransactionData>, Parcel) {
+    pub fn transact(&mut self, handle: i32, code: u32, flags: TransactionFlags, data: &mut Parcel) -> Result<(Option<BinderTransactionData>, Parcel), Error> {
 
-        self.pending_out_data.write_i32(BinderDriverCommandProtocol::Transaction as i32);
+        self.pending_out_data.write_i32(BinderDriverCommandProtocol::Transaction as i32)?;
 
         let transaction_data_out = BinderTransactionData {
             target: handle as u32,
@@ -453,17 +465,17 @@ impl Binder {
             sender_euid: 0,
             data_size: data.len() as u64,
             offset_size: (data.offsets_len() * size_of::<usize>()) as u64,
-            data: if data.len() != 0 { data.as_mut_ptr() } else { 0 as *mut u8 },
-            offsets: if data.offsets_len() != 0 { data.offsets().as_mut_ptr() } else { 0 as *mut usize },
+            data: if !data.is_empty() { data.as_mut_ptr() } else { std::ptr::null_mut() },
+            offsets: if data.offsets_len() != 0 { data.offsets().as_mut_ptr() } else { std::ptr::null_mut() },
         };
-        self.pending_out_data.write_transaction_data(&transaction_data_out);
+        self.pending_out_data.write_transaction_data(&transaction_data_out)?;
 
         self.do_write_read(&mut Parcel::empty())
     }
 
-    pub fn reply(&mut self, data: &mut Parcel, flags: TransactionFlags) -> (Option<BinderTransactionData>, Parcel) {
+    pub fn reply(&mut self, data: &mut Parcel, flags: TransactionFlags) -> Result<(Option<BinderTransactionData>, Parcel), Error> {
 
-        self.pending_out_data.write_i32(BinderDriverCommandProtocol::Reply as i32);
+        self.pending_out_data.write_i32(BinderDriverCommandProtocol::Reply as i32)?;
 
         let transaction_data_out = BinderTransactionData {
             target: 0xffffffff,
@@ -474,30 +486,28 @@ impl Binder {
             sender_euid: 0,
             data_size: data.len() as u64,
             offset_size: (data.offsets_len() * size_of::<usize>()) as u64,
-            data: if data.len() != 0 { data.as_mut_ptr() } else { 0 as *mut u8 },
-            offsets: if data.offsets_len() != 0 { data.offsets().as_mut_ptr() } else { 0 as *mut usize },
+            data: if !data.is_empty() { data.as_mut_ptr() } else { std::ptr::null_mut() },
+            offsets: if data.offsets_len() != 0 { data.offsets().as_mut_ptr() } else { std::ptr::null_mut() },
         };
-        self.pending_out_data.write_transaction_data(&transaction_data_out);
+        self.pending_out_data.write_transaction_data(&transaction_data_out)?;
 
         self.do_write_read(&mut Parcel::empty())
     }
 
-    pub fn do_write_read(&mut self, parcel_out: &mut Parcel) -> (Option<BinderTransactionData>, Parcel) {
-        self.pending_out_data.append_parcel(parcel_out);
+    pub fn do_write_read(&mut self, parcel_out: &mut Parcel) -> Result<(Option<BinderTransactionData>, Parcel), Error> {
+        self.pending_out_data.append_parcel(parcel_out)?;
         let mut parcel_in = self.write_read(&self.pending_out_data, true);
         self.pending_out_data.reset();
 
         self.proccess_incoming(&mut parcel_in)
     }
 
-    fn proccess_incoming(&mut self, parcel_in: &mut Parcel) -> (Option<BinderTransactionData>, Parcel) {
-        let mut acquire_result = BinderResult::NoError;
-
+    fn proccess_incoming(&mut self, parcel_in: &mut Parcel) -> Result<(Option<BinderTransactionData>, Parcel), Error> {
         while parcel_in.has_unread_data() {
-            let cmd_u32 = parcel_in.read_u32();
+            let cmd_u32 = parcel_in.read_u32()?;
             let cmd_option = BinderDriverReturnProtocol::from_u32(cmd_u32);
-            match cmd_option {
-                Some(cmd) => match cmd {
+            if let Some(cmd) = cmd_option {
+                match cmd {
                     BinderDriverReturnProtocol::TransactionComplete => {},
                     BinderDriverReturnProtocol::DeadReply => {
                         panic!("Got a DEAD_REPLY");
@@ -510,41 +520,34 @@ impl Binder {
                     BinderDriverReturnProtocol::Acquire => {
                     },
                     BinderDriverReturnProtocol::AcquireResult => {
-                        let result = parcel_in.read_i32();
-                        acquire_result = if result == 0 {
-                            BinderResult::InvalidOperation
-                        } else {
-                            BinderResult::NoError
-                        };
+                        parcel_in.read_i32()?;
                     },
                     BinderDriverReturnProtocol::Reply | BinderDriverReturnProtocol::Transaction => {
-                        let transaction_data_in = parcel_in.read_transaction_data();
-                        let parcel = Parcel::from_data_and_offsets(
+                        let transaction_data_in = parcel_in.read_transaction_data()?;
+                        let parcel = unsafe { Parcel::from_data_and_offsets(
                                 transaction_data_in.data,
                                 transaction_data_in.data_size as usize,
                                 transaction_data_in.offsets,
                                 transaction_data_in.offset_size as usize / size_of::<usize>()
-                            );
-                        return (
+                            ) };
+                        return Ok((
                             Some(transaction_data_in),
                             parcel,
-                        );
+                        ));
                     },
                     BinderDriverReturnProtocol::Error => {
-                        println!("Got an error {}", parcel_in.read_i32());
+                        println!("Got an error {}", parcel_in.read_i32()?);
                     },
                     BinderDriverReturnProtocol::Noop => {
                     },
                     BinderDriverReturnProtocol::SpawnLooper => {
                     },
                     _  => {}
-
-                },
-                None => {},
+                }
             }
         }
 
-        (None, Parcel::empty())
+        Ok((None, Parcel::empty()))
     }
     /// Perform a low-level binder write/read operation
     fn write_read(&self, data_out: &Parcel, with_read: bool) -> Parcel {
@@ -573,9 +576,9 @@ impl Drop for Binder {
     fn drop(&mut self) {
         //TODO: do we need to unmap?
 
-        self.exit_looper();
+        self.exit_looper().unwrap();
 
-        close(self.fd);
+        close(self.fd).unwrap();
     }
 }
 

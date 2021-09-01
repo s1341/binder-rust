@@ -1,9 +1,8 @@
 use proc_macro2::{Ident, TokenStream};
-use quote::quote;
+use quote::{quote, format_ident};
 use syn::{self, Attribute, DeriveInput, parse_macro_input, punctuated::Punctuated};
-use syn::Meta::{List, NameValue, Path};
-use syn::NestedMeta::{Lit, Meta};
-use syn::{LitInt};
+use syn::Meta::{List, NameValue};
+use syn::NestedMeta::Meta;
 use syn::Token;
 
 //#[derive(FromDeriveInput, Default)]
@@ -22,9 +21,9 @@ struct Container<'a> {
     /// The contents of the struct or enum.
     pub data: Data<'a>,
     /// Any generics on the struct or enum.
-    pub generics: &'a syn::Generics,
+    pub _generics: &'a syn::Generics,
     /// Original input.
-    pub original: &'a syn::DeriveInput,
+    pub _original: &'a syn::DeriveInput,
 }
 
 /// The fields of a struct or enum.
@@ -41,10 +40,11 @@ struct Variant<'a> {
     pub attrs: VariantAttribute,
     pub style: Style,
     pub fields: Vec<Field<'a>>,
-    pub original: &'a syn::Variant,
+    pub _original: &'a syn::Variant,
 }
 
 /// A field of a struct.
+#[derive(Debug)]
 struct Field<'a> {
     pub member: syn::Member,
     //pub attrs: FieldAttribute,
@@ -69,7 +69,7 @@ impl<'a> Container<'a> {
     pub fn from_ast(
         item: &'a syn::DeriveInput,
     ) -> Option<Container<'a>> {
-        let mut data = match &item.data {
+        let data = match &item.data {
             syn::Data::Enum(data) => Data::Enum(enum_from_ast(&data.variants)),
             syn::Data::Struct(data) => {
                 let (style, fields) = struct_from_ast(&data.fields, None);
@@ -80,26 +80,26 @@ impl<'a> Container<'a> {
             }
         };
 
-        let mut item = Container {
+        let item = Container {
             ident: item.ident.clone(),
             //attrs,
             data,
-            generics: &item.generics,
-            original: item,
+            _generics: &item.generics,
+            _original: item,
         };
         Some(item)
     }
 }
 
 impl<'a> Data<'a> {
-    pub fn all_fields(&'a self) -> Box<dyn Iterator<Item = &'a Field<'a>> + 'a> {
-        match self {
-            Data::Enum(variants) => {
-                Box::new(variants.iter().flat_map(|variant| variant.fields.iter()))
-            }
-            Data::Struct(_, fields) => Box::new(fields.iter()),
-        }
-    }
+    //pub fn all_fields(&'a self) -> Box<dyn Iterator<Item = &'a Field<'a>> + 'a> {
+        //match self {
+            //Data::Enum(variants) => {
+                //Box::new(variants.iter().flat_map(|variant| variant.fields.iter()))
+            //}
+            //Data::Struct(_, fields) => Box::new(fields.iter()),
+        //}
+    //}
 
     //pub fn has_getter(&self) -> bool {
         //self.all_fields().any(|f| f.attrs.getter().is_some())
@@ -118,7 +118,7 @@ fn get_meta_items(attr: &syn::Attribute) -> Result<Vec<syn::NestedMeta>, ()> {
 
     match attr.parse_meta() {
         Ok(List(meta)) => Ok(meta.nested.into_iter().collect()),
-        Ok(other) => {
+        Ok(_other) => {
             panic!("expected #[parcelable(...)]");
         }
         Err(err) => {
@@ -126,7 +126,7 @@ fn get_meta_items(attr: &syn::Attribute) -> Result<Vec<syn::NestedMeta>, ()> {
         }
     }
 }
-fn variant_attributes(attrs: &Vec<Attribute>) -> VariantAttribute {
+fn variant_attributes(attrs: &[Attribute]) -> VariantAttribute {
     let mut variant_attribute = VariantAttribute::default();
     for meta_item in attrs.iter().flat_map(|attr| get_meta_items(attr)).flatten() {
         match &meta_item {
@@ -145,9 +145,9 @@ fn variant_attributes(attrs: &Vec<Attribute>) -> VariantAttribute {
 }
 
 
-fn enum_from_ast<'a>(
-    variants: &'a Punctuated<syn::Variant,  Token![,]>,
-) -> Vec<Variant<'a>> {
+fn enum_from_ast(
+    variants: &Punctuated<syn::Variant,  Token![,]>,
+) -> Vec<Variant> {
     variants
         .iter()
         .map(|variant| {
@@ -159,7 +159,7 @@ fn enum_from_ast<'a>(
                 attrs,
                 style,
                 fields,
-                original: variant,
+                _original: variant,
             }
         })
         .collect()
@@ -188,7 +188,7 @@ fn struct_from_ast<'a>(
 
 fn fields_from_ast<'a>(
     fields: &'a Punctuated<syn::Field, Token![,]>,
-    attrs: Option<&VariantAttribute>,
+    _attrs: Option<&VariantAttribute>,
 ) -> Vec<Field<'a>> {
     fields
         .iter()
@@ -211,7 +211,7 @@ fn build_newtype_variant(typename: &Ident, variant_name: &Ident, field: &Field) 
         #typename::#variant_name(<#field_ty as Parcelable>::deserialize(parcel)?)
     }}
 }
-fn build_tuple_variant(typename: &Ident, variant_name: &Ident, fields: &Vec<Field>) -> TokenStream {
+fn build_tuple_variant(typename: &Ident, variant_name: &Ident, fields: &[Field]) -> TokenStream {
     if fields.len() == 1 {
         return build_newtype_variant(typename, variant_name, &fields[0]);
     }
@@ -227,7 +227,7 @@ fn build_tuple_variant(typename: &Ident, variant_name: &Ident, fields: &Vec<Fiel
         #typename::#variant_name(#(#field_expressions),*)
     }}
 }
-fn build_struct_variant(typename: &Ident, variant_name: &Ident, fields: &Vec<Field>) -> TokenStream {
+fn build_struct_variant(typename: &Ident, variant_name: &Ident, fields: &[Field]) -> TokenStream {
     let field_expressions = fields.iter().map(|field| {
         let field_ty = field.ty;
         let field_name = &field.member;
@@ -250,7 +250,7 @@ pub fn parcelable_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStr
     let ident_path: syn::Path = ident.clone().into();
     let typename = &ident_path.segments.last().unwrap().ident;
 
-    let body = match &cont.data {
+    let body_deserialize = match &cont.data {
         Data::Enum(variants) => {
             let variant_arms = variants.iter().enumerate().map(|(i, variant)| {
                 let discriminator = if let Some(discriminator) = variant.attrs.discriminator {
@@ -283,7 +283,7 @@ pub fn parcelable_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStr
             });
 
             quote! {
-                Ok(match parcel.read_i32() {
+                Ok(match parcel.read_i32()? {
                     #(#variant_arms)*
                     _ => { return Err(Error::BadEnumValue); }
                 })
@@ -314,7 +314,7 @@ pub fn parcelable_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStr
                 Ok(#typename(#(#field_expressions),*))
             }
         },
-        Data::Struct(Style::Unit, fields) => {
+        Data::Struct(Style::Unit, _fields) => {
             quote! {
                 Ok(())
             }
@@ -327,10 +327,136 @@ pub fn parcelable_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStr
         },
     };
 
+    let body_serialize = match &cont.data {
+        Data::Enum(variants) => {
+            let variant_arms = variants.iter().enumerate().map(|(i, variant)| {
+                let discriminator = if let Some(discriminator) = variant.attrs.discriminator {
+                    discriminator
+                } else {
+                    i as i32
+                };
+
+                let variant_name = &variant.ident;
+
+                let block = match variant.style {
+                    Style::Unit => {
+                        quote! {
+                            #typename::#variant_name => { parcel.write_i32(#discriminator)?; },
+                        }
+                    },
+                    Style::Newtype => {
+                        //build_newtype_variant(typename, variant_name, &variant.fields[0])
+                        quote! {
+                            #typename::#variant_name(_nt) => {
+                                parcel.write_i32(#discriminator)?;
+                                _nt.serialize(parcel)?
+                            }
+                        }
+                    },
+                    Style::Tuple => {
+                        let field_expressions = variant.fields.iter().enumerate().map(|(i, _field)| {
+                            let name = format_ident!("_t_{}", i);
+                            quote! {
+                                #name.serialize(parcel)?
+                            }
+                        });
+
+
+                        let mut field_names = Vec::new();
+                        for i in 0..variant.fields.len() {
+                            field_names.push(format_ident!("_t_{}", i));
+                        }
+
+                        quote! {
+                            #typename::#variant_name(#(#field_names),*) => {
+                                parcel.write_i32(#discriminator)?;
+                                #(#field_expressions);*
+                            }
+                        }
+                    },
+                    Style::Struct => {
+                        let field_expressions = variant.fields.iter().map(|field| {
+                            let field_name = &field.member;
+                            quote! {
+                                #field_name.serialize(parcel)?
+                            }
+
+                        });
+                        let field_names = variant.fields.iter().map(|field| {
+                            &field.member
+
+                        });
+
+                        quote! {
+                            #typename::#variant_name{#(#field_names),*} => {
+                                parcel.write_i32(#discriminator)?;
+
+                                #(#field_expressions);*
+                            }
+                        }
+                    },
+                };
+                block
+            });
+
+            quote! {
+                match self {
+                    #(#variant_arms)*
+                };
+            }
+        },
+        Data::Struct(Style::Struct, fields) => {
+            let field_expressions = fields.iter().map(|field| {
+                let field_name = &field.member;
+                quote! {
+                    self.#field_name.serialize(parcel)?;
+                }
+            });
+
+            quote! {
+                #(#field_expressions)*
+            }
+        },
+        Data::Struct(Style::Tuple, fields) => {
+            let field_expressions = fields.iter().enumerate().map(|(i, _field)| {
+                let name = format_ident!("_t_{}", i);
+                quote! {
+                    #name.serialize(parcel)?;
+                }
+            });
+
+
+            let mut field_names = Vec::new();
+            for i in 0..fields.len() {
+                field_names.push(format_ident!("_t_{}", i));
+            }
+
+            quote! {
+                if let #typename(#(#field_names),*) = self {
+                    #(#field_expressions)*
+                }
+
+            }
+        },
+        Data::Struct(Style::Unit, _fields) => {
+            quote! {
+            }
+        },
+        Data::Struct(Style::Newtype, _fields) => {
+            quote! {
+                self.0.serialize(parcel)?;
+            }
+        },
+    };
+
     let output = quote! {
         impl Parcelable for #ident {
             fn deserialize(parcel: &mut Parcel) -> Result<Self, Error> where Self: Sized {
-                #body
+                #body_deserialize
+            }
+            fn serialize(&self, parcel: &mut Parcel) -> Result<(), Error> {
+                #body_serialize
+                Ok(())
             }
         }
     };
