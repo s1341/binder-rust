@@ -17,7 +17,7 @@ struct Container<'a> {
     /// The struct or enum name (without generics).
     pub ident: syn::Ident,
     /// Attributes on the structure, parsed for Serde.
-    //pub attrs: ContainerAttribute,
+    pub attrs: ContainerAttribute,
     /// The contents of the struct or enum.
     pub data: Data<'a>,
     /// Any generics on the struct or enum.
@@ -82,7 +82,7 @@ impl<'a> Container<'a> {
 
         let item = Container {
             ident: item.ident.clone(),
-            //attrs,
+            attrs: container_attributes(&item.attrs),
             data,
             _generics: &item.generics,
             _original: item,
@@ -107,6 +107,10 @@ impl<'a> Data<'a> {
 }
 
 #[derive(Default)]
+struct ContainerAttribute {
+    push_object: bool,
+}
+#[derive(Default)]
 struct VariantAttribute {
     discriminator: Option<i32>,
 }
@@ -125,6 +129,23 @@ fn get_meta_items(attr: &syn::Attribute) -> Result<Vec<syn::NestedMeta>, ()> {
             panic!("error gathering attributes: {}", err);
         }
     }
+}
+fn container_attributes(attrs: &[Attribute]) -> ContainerAttribute {
+    let mut container_attribute = ContainerAttribute::default();
+    for meta_item in attrs.iter().flat_map(|attr| get_meta_items(attr)).flatten() {
+        match &meta_item {
+            Meta(NameValue(m)) if m.path.get_ident().unwrap() == "push_object" => {
+                if let syn::Lit::Bool(b) = &m.lit {
+                    container_attribute.push_object = b.value();
+                };
+            }
+            _ => {
+                panic!("unexpected parcelable attribute");
+            }
+        }
+    }
+
+    container_attribute
 }
 fn variant_attributes(attrs: &[Attribute]) -> VariantAttribute {
     let mut variant_attribute = VariantAttribute::default();
@@ -449,12 +470,20 @@ pub fn parcelable_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStr
         },
     };
 
+    let push_object_block = if cont.attrs.push_object {
+        quote! {
+            parcel.push_object()?;
+        }
+    } else {
+        quote! {}
+    };
     let output = quote! {
         impl Parcelable for #ident {
             fn deserialize(parcel: &mut Parcel) -> Result<Self, Error> where Self: Sized {
                 #body_deserialize
             }
             fn serialize(&self, parcel: &mut Parcel) -> Result<(), Error> {
+                #push_object_block
                 #body_serialize
                 Ok(())
             }

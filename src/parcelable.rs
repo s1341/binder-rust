@@ -1,7 +1,7 @@
-use std::{collections::HashMap, fmt::Debug, hash::Hash};
+use std::{collections::HashMap, fmt::Debug, hash::Hash, str::FromStr};
 use crate::{Error, Parcel};
 
-pub trait Parcelable {
+pub trait Parcelable: std::fmt::Debug {
     fn deserialize(parcel: &mut Parcel) -> Result<Self, Error> where Self: Sized;
     fn serialize(&self, parcel: &mut Parcel) -> Result<(), Error>;
 }
@@ -11,8 +11,21 @@ pub trait Parcelable {
         //write!(f, "{:?}", (*self).fmt(f))
     //}
 //}
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct String16(String);
+
+impl FromStr for String16 {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.to_string()))
+    }
+}
+
+impl Default for String16 {
+    fn default() -> Self {
+        Self("".to_string())
+    }
+}
 
 macro_rules! implement_primitve {
     ($ty:ty, $func:ident, $wty:ty, $wfunc:ident) => {
@@ -40,6 +53,16 @@ implement_primitve!(i64, read_u64, u64, write_u64);
 implement_primitve!(u64, read_u64, u64, write_u64);
 implement_primitve!(usize, read_usize, usize, write_usize);
 
+impl Parcelable for () {
+    fn deserialize(_parcel: &mut Parcel) -> Result<Self, Error>
+    where Self: Sized {
+        Ok(())
+    }
+
+    fn serialize(&self, _parcel: &mut Parcel) -> Result<(), Error> {
+        Ok(())
+    }
+}
 impl Parcelable for bool {
     fn deserialize(parcel: &mut Parcel) -> Result<Self, Error> {
         Ok(parcel.read_i32()? != 0)
@@ -53,10 +76,14 @@ impl Parcelable for bool {
 
 impl Parcelable for String {
     fn deserialize(parcel: &mut Parcel) -> Result<Self, Error> {
-        Ok(parcel.read_str()?)
+        parcel.read_str()
     }
     fn serialize(&self, parcel: &mut Parcel) -> Result<(), Error> {
-        parcel.write_str(self)?;
+        if self.is_empty() {
+            parcel.write_i32(-1)?;
+        } else {
+            parcel.write_str(self)?;
+        }
         Ok(())
     }
 }
@@ -65,7 +92,11 @@ impl Parcelable for String16 {
         Ok(String16(parcel.read_str16()?))
     }
     fn serialize(&self, parcel: &mut Parcel) -> Result<(), Error> {
-        parcel.write_str16(&self.0)?;
+        if self.0.is_empty() {
+            parcel.write_i32(-1)?;
+        } else {
+            parcel.write_str16(&self.0)?;
+        }
         Ok(())
     }
 }

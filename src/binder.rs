@@ -83,7 +83,8 @@ impl Parcelable for BinderType {
 }
 
 
-#[derive(Parcelable, Debug)]
+#[derive(Parcelable, Clone, Debug)]
+#[parcelable(push_object = true)]
 pub struct BinderFlatObject {
     pub(crate) binder_type: BinderType,
     flags: u32,
@@ -516,10 +517,13 @@ impl Binder {
                         panic!("Transaction failed");
                     },
                     BinderDriverReturnProtocol::IncRefs => {
+                        log::info!("binder: IncRefs ******************");
                     },
                     BinderDriverReturnProtocol::Acquire => {
+                        log::info!("binder: Acquire ******************");
                     },
                     BinderDriverReturnProtocol::AcquireResult => {
+                        log::info!("binder: AcquireResult ****************");
                         parcel_in.read_i32()?;
                     },
                     BinderDriverReturnProtocol::Reply | BinderDriverReturnProtocol::Transaction => {

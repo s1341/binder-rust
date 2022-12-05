@@ -2,6 +2,7 @@ use crate::{
     Error,
     binder::{Binder, BinderFlatObject, Transaction, TransactionFlags},
     parcel::Parcel,
+    parcelable::Parcelable,
 };
 
 use std::ffi::c_void;
@@ -45,7 +46,7 @@ impl<'a> Service<'a> {
         let (_, mut parcel) = self
             .service_manager
             .binder
-            .transact(self.handle, function_index, TransactionFlags::AcceptFds, &mut parcel)?;
+            .transact(self.handle, function_index, TransactionFlags::AcceptFds |TransactionFlags::CollectNotedAppOps, &mut parcel)?;
 
         let status = parcel.read_u32()?;
         if status != 0 {
@@ -146,7 +147,7 @@ impl<'a> ServiceManager<'a> {
             &mut parcel,
         )?;
         parcel.read_u32()?;
-        let flat_object: BinderFlatObject = parcel.read_object()?;
+        let flat_object = BinderFlatObject::deserialize(&mut parcel)?;
 
         self.binder.add_ref(flat_object.handle as i32)?;
         self.binder.acquire(flat_object.handle as i32)?;

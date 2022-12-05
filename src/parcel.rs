@@ -123,6 +123,11 @@ impl Parcel {
         &mut self.object_offsets
     }
 
+    pub fn push_object(&mut self) -> Result<(), Error> {
+        self.object_offsets.push(self.cursor.position() as usize);
+        Ok(())
+    }
+
     /// Check if the parcel has unread data
     pub fn has_unread_data(&self) -> bool {
         self.cursor.position() != self.len() as u64
@@ -376,7 +381,7 @@ impl Parcel {
     /// Write an interface token to the parcel
     pub fn write_interface_token(&mut self, name: &str) -> Result<(), Error>{
         // strict mode policy
-        self.write_i32(STRICT_MODE_PENALTY_GATHER)?;
+        self.write_i32(STRICT_MODE_PENALTY_GATHER | 0x42000004)?;
         // work source uid, we use kUnsetWorkSource
         self.write_i32(-1)?;
         // header marker
