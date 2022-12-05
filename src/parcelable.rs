@@ -1,17 +1,19 @@
-use std::{collections::HashMap, fmt::Debug, hash::Hash, str::FromStr};
 use crate::{Error, Parcel};
+use std::{collections::HashMap, fmt::Debug, hash::Hash, str::FromStr};
 
 pub trait Parcelable: std::fmt::Debug {
-    fn deserialize(parcel: &mut Parcel) -> Result<Self, Error> where Self: Sized;
+    fn deserialize(parcel: &mut Parcel) -> Result<Self, Error>
+    where
+        Self: Sized;
     fn serialize(&self, parcel: &mut Parcel) -> Result<(), Error>;
 }
 
 //impl Debug for dyn Parcelable {
-    //fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        //write!(f, "{:?}", (*self).fmt(f))
-    //}
+//fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//write!(f, "{:?}", (*self).fmt(f))
 //}
-#[derive(Clone, Debug)]
+//}
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct String16(String);
 
 impl FromStr for String16 {
@@ -30,7 +32,10 @@ impl Default for String16 {
 macro_rules! implement_primitve {
     ($ty:ty, $func:ident, $wty:ty, $wfunc:ident) => {
         impl Parcelable for $ty {
-            fn deserialize(parcel: &mut Parcel) -> Result<Self, Error> where Self: Sized {
+            fn deserialize(parcel: &mut Parcel) -> Result<Self, Error>
+            where
+                Self: Sized,
+            {
                 Ok(parcel.$func()? as $ty)
             }
             fn serialize(&self, parcel: &mut Parcel) -> Result<(), Error> {
@@ -38,7 +43,7 @@ macro_rules! implement_primitve {
                 Ok(())
             }
         }
-    }
+    };
 }
 
 implement_primitve!(u8, read_u8, u8, write_u8);
@@ -55,7 +60,9 @@ implement_primitve!(usize, read_usize, usize, write_usize);
 
 impl Parcelable for () {
     fn deserialize(_parcel: &mut Parcel) -> Result<Self, Error>
-    where Self: Sized {
+    where
+        Self: Sized,
+    {
         Ok(())
     }
 
@@ -155,7 +162,9 @@ impl<K: Parcelable + Eq + Hash, V: Parcelable> Parcelable for HashMap<K, V> {
         let len = parcel.read_i32()?;
         let mut res = HashMap::new();
         for _ in 0..len {
-            res.insert(K::deserialize(parcel)?, V::deserialize(parcel)?);
+            let key = K::deserialize(parcel)?;
+            let value = V::deserialize(parcel)?;
+            res.insert(key, value);
         }
         Ok(res)
     }

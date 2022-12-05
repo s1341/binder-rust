@@ -1,26 +1,24 @@
+use crate::{parcel::Parcel, Error, Parcelable};
 use parcelable_derive::Parcelable;
-use crate::{Error, Parcelable, parcel::Parcel};
 
 use nix::{
-    fcntl::{
-        OFlag,
-        open,
-    },
-    ioctl_readwrite,
-    ioctl_write_int,
-    ioctl_write_ptr,
+    fcntl::{open, OFlag},
+    ioctl_readwrite, ioctl_write_int, ioctl_write_ptr,
     sys::{
-        mman::{
-            MapFlags,
-            mmap,
-            ProtFlags,
-        },
+        mman::{mmap, MapFlags, ProtFlags},
         stat::Mode,
     },
     unistd::close,
 };
 
-use std::{convert::{TryFrom, TryInto}, ffi::c_void, mem::size_of, ops::BitOr, os::unix::io::RawFd, ptr, slice};
+use std::{
+    convert::{TryFrom, TryInto},
+    ffi::c_void,
+    mem::size_of,
+    ops::BitOr,
+    os::unix::io::RawFd,
+    ptr, slice,
+};
 
 use num_traits::FromPrimitive;
 
@@ -31,12 +29,11 @@ const DEVICE: &str = "/dev/binder";
 const DEFAULT_MAX_BINDER_THREADS: u32 = 15;
 
 const PAGE_SIZE: usize = 0x1000;
-const BINDER_VM_SIZE: usize =  (1 * 1024 * 1024) - PAGE_SIZE * 2;
-
+const BINDER_VM_SIZE: usize = (1 * 1024 * 1024) - PAGE_SIZE * 2;
 
 macro_rules! pack_chars {
     ($c1:expr, $c2:expr, $c3:expr, $c4:expr) => {
-        (((($c1 as u32) << 24)) | ((($c2 as u32) << 16)) | ((($c3 as u32) << 8)) | ($c4 as u32))
+        ((($c1 as u32) << 24) | (($c2 as u32) << 16) | (($c3 as u32) << 8) | ($c4 as u32))
     };
 }
 
@@ -63,7 +60,9 @@ pub enum BinderType {
 }
 impl Parcelable for BinderType {
     fn deserialize(parcel: &mut Parcel) -> Result<Self, crate::Error>
-    where Self: Sized {
+    where
+        Self: Sized,
+    {
         Ok(match parcel.read_u32()? {
             TF_BINDER => BinderType::Binder,
             TF_WEAKBINDER => BinderType::WeakBinder,
@@ -72,7 +71,9 @@ impl Parcelable for BinderType {
             TF_FD => BinderType::Fd,
             TF_FDA => BinderType::Fda,
             TF_PTR => BinderType::Ptr,
-            _ => { return Err(Error::BadEnumValue); }
+            _ => {
+                return Err(Error::BadEnumValue);
+            }
         })
     }
 
@@ -82,7 +83,6 @@ impl Parcelable for BinderType {
     }
 }
 
-
 #[derive(Parcelable, Clone, Debug)]
 #[parcelable(push_object = true)]
 pub struct BinderFlatObject {
@@ -90,7 +90,7 @@ pub struct BinderFlatObject {
     flags: u32,
     pub(crate) handle: usize,
     cookie: usize,
-    stability: u32,// stability  == SYSTEM
+    stability: u32, // stability  == SYSTEM
 }
 
 impl BinderFlatObject {
@@ -102,7 +102,33 @@ impl BinderFlatObject {
             cookie,
             stability: 0xc, // == SYSTEM
         }
+    }
 
+    pub fn handle(&self) -> usize {
+        self.handle
+    }
+
+    pub fn cookie(&self) -> usize {
+        self.cookie
+    }
+}
+#[derive(Parcelable, Clone, Debug)]
+#[parcelable(push_object = true)]
+pub struct BinderFd {
+    pub(crate) binder_type: BinderType,
+    flags: u32,
+    pub(crate) handle: usize,
+    cookie: usize,
+}
+
+impl BinderFd {
+    pub fn new(binder_type: BinderType, handle: usize, cookie: usize, flags: u32) -> Self {
+        Self {
+            binder_type,
+            flags,
+            handle,
+            cookie,
+        }
     }
 
     pub fn handle(&self) -> usize {
@@ -114,7 +140,7 @@ impl BinderFlatObject {
     }
 }
 
-const PING_TRANSCATION: u32 = pack_chars!(b'_', b'P',b'N',b'G');
+const PING_TRANSCATION: u32 = pack_chars!(b'_', b'P', b'N', b'G');
 const DUMP_TRANSACTION: u32 = pack_chars!(b'_', b'D', b'M', b'P');
 const SHELL_COMMAND_TRANSACTION: u32 = pack_chars!(b'_', b'C', b'M', b'D');
 const INTERFACE_TRANSACTION: u32 = pack_chars!(b'_', b'N', b'T', b'F');
@@ -146,7 +172,6 @@ pub struct BinderVersion {
     protocol_version: i32,
 }
 
-
 #[repr(C)]
 pub struct BinderWriteRead {
     write_size: usize,
@@ -158,29 +183,27 @@ pub struct BinderWriteRead {
 }
 
 impl BinderWriteRead {
-    pub fn write_size (&self) -> usize {
+    pub fn write_size(&self) -> usize {
         self.write_size
     }
-    pub fn write_consumed (&self) -> usize {
+    pub fn write_consumed(&self) -> usize {
         self.write_consumed
     }
-    pub fn read_size (&self) -> usize {
+    pub fn read_size(&self) -> usize {
         self.read_size
     }
-    pub fn read_consumed (&self) -> usize {
+    pub fn read_consumed(&self) -> usize {
         self.read_consumed
     }
-    pub fn write_buffer (&self) -> *const c_void {
-
+    pub fn write_buffer(&self) -> *const c_void {
         self.write_buffer
     }
-    pub fn read_buffer (&self) -> *mut c_void {
+    pub fn read_buffer(&self) -> *mut c_void {
         self.read_buffer
     }
 }
 #[repr(C)]
-pub(crate) struct BinderTransactionDataData {
-}
+pub(crate) struct BinderTransactionDataData {}
 #[repr(C)]
 #[derive(Debug)]
 pub struct BinderTransactionData {
@@ -243,19 +266,19 @@ bitflags! {
 
 macro_rules! _iow {
     ($c1:expr, $c2:expr, $c3:expr) => {
-        (((0x40 << 24)) | ((($c3 as u32) << 16)) | ((($c1 as u32) << 8)) | ($c2 as u32))
+        ((0x40 << 24) | (($c3 as u32) << 16) | (($c1 as u32) << 8) | ($c2 as u32))
     };
 }
 
 macro_rules! _ior {
     ($c1:expr, $c2:expr, $c3:expr) => {
-        (((0x80 << 24)) | ((($c3 as u32) << 16)) | ((($c1 as u32) << 8)) | ($c2 as u32))
+        ((0x80 << 24) | (($c3 as u32) << 16) | (($c1 as u32) << 8) | ($c2 as u32))
     };
 }
 
 macro_rules! _io {
     ($c1:expr, $c2:expr) => {
-        (((($c1 as u32) << 8)) | ($c2 as u32))
+        ((($c1 as u32) << 8) | ($c2 as u32))
     };
 }
 
@@ -273,8 +296,8 @@ const BC_ATTEMPT_ACQUIRE: u32 = _iow!(b'c', 10, 0x10);
 const BC_REGISTER_LOOPER: u32 = _io!(b'c', 11);
 const BC_ENTER_LOOPER: u32 = _io!(b'c', 12);
 const BC_EXIT_LOOPER: u32 = _io!(b'c', 13);
-const BC_REQUEST_DEATH_NOTIFICATION: u32 = _iow!(b'c', 14, 0x10);
-const BC_CLEAR_DEATH_NOTIFICATION: u32 = _iow!(b'c', 15, 0x10);
+const BC_REQUEST_DEATH_NOTIFICATION: u32 = _iow!(b'c', 14, 0xc);
+const BC_CLEAR_DEATH_NOTIFICATION: u32 = _iow!(b'c', 15, 0x0c);
 const BC_DEAD_BINDER_DONE: u32 = _iow!(b'c', 16, 0x8);
 const BC_TRANSACTION_SG: u32 = _iow!(b'c', 17, 0x48);
 const BC_REPLY_SG: u32 = _iow!(b'c', 18, 0x48);
@@ -305,6 +328,7 @@ pub enum BinderDriverCommandProtocol {
 
 impl From<u32> for BinderDriverCommandProtocol {
     fn from(int: u32) -> Self {
+        log::info!("BinderDriverCommandProtocol: {:x}", int);
         BinderDriverCommandProtocol::from_u32(int).unwrap()
     }
 }
@@ -320,12 +344,12 @@ const BR_INCREFS: u32 = _ior!(b'r', 7, 0x10);
 const BR_ACQUIRE: u32 = _ior!(b'r', 8, 0x10);
 const BR_RELEASE: u32 = _ior!(b'r', 9, 0x10);
 const BR_DECREFS: u32 = _ior!(b'r', 10, 0x10);
-const BR_ATTEMPT_ACQUIRE: u32 = _ior!(b'r', 11, 0x10);
+const BR_ATTEMPT_ACQUIRE: u32 = _ior!(b'r', 11, 0xc);
 const BR_NOOP: u32 = _io!(b'r', 12);
 const BR_SPAWN_LOOPER: u32 = _io!(b'r', 13);
 const BR_FINISHED: u32 = _io!(b'r', 14);
 const BR_DEAD_BINDER: u32 = _ior!(b'r', 15, 0x8);
-const BR_CLEAR_DEATH_NOTIFICATION_DONE: u32 = _ior!(b'r', 16, 0x10);
+const BR_CLEAR_DEATH_NOTIFICATION_DONE: u32 = _ior!(b'r', 16, 0x8);
 const BR_FAILED_REPLY: u32 = _io!(b'r', 17);
 const BR_FROZEN_REPLY: u32 = _io!(b'r', 18);
 const BR_ONEWAY_SPAM_SUSPECT: u32 = _io!(b'r', 19);
@@ -357,6 +381,7 @@ pub enum BinderDriverReturnProtocol {
 
 impl From<u32> for BinderDriverReturnProtocol {
     fn from(int: u32) -> Self {
+        log::info!("BinderDriverReturnProtocol: {:x}", int);
         BinderDriverReturnProtocol::from_u32(int).unwrap()
     }
 }
@@ -376,7 +401,9 @@ impl Binder {
 
         let fd = open(DEVICE, flags, Mode::empty()).expect("Failed to open binder device");
 
-        let mut binder_version = BinderVersion { protocol_version: 0 };
+        let mut binder_version = BinderVersion {
+            protocol_version: 0,
+        };
         unsafe {
             binder_read_version(fd, &mut binder_version).expect("Failed to read binder version");
         }
@@ -384,7 +411,17 @@ impl Binder {
         let mut flags = MapFlags::empty();
         flags.set(MapFlags::MAP_PRIVATE, true);
         flags.set(MapFlags::MAP_NORESERVE, true);
-        let mapping_address = unsafe { mmap(ptr::null_mut(), BINDER_VM_SIZE, ProtFlags::PROT_READ, flags, fd, 0) }.expect("Failed to map the binder file");
+        let mapping_address = unsafe {
+            mmap(
+                ptr::null_mut(),
+                BINDER_VM_SIZE,
+                ProtFlags::PROT_READ,
+                flags,
+                fd,
+                0,
+            )
+        }
+        .expect("Failed to map the binder file");
 
         let binder = Self {
             fd,
@@ -393,9 +430,9 @@ impl Binder {
         };
 
         unsafe {
-            binder_set_max_threads(fd, &DEFAULT_MAX_BINDER_THREADS).expect("Failed to set max threads");
+            binder_set_max_threads(fd, &DEFAULT_MAX_BINDER_THREADS)
+                .expect("Failed to set max threads");
         }
-
 
         binder
     }
@@ -423,7 +460,8 @@ impl Binder {
     /// Increment the server side reference count of the given handle. Note that this request is
     /// queued and only actually perfomed with the next outgoing transaction.
     pub fn add_ref(&mut self, handle: i32) -> Result<(), Error> {
-        self.pending_out_data.write_u32(BinderDriverCommandProtocol::IncRefs as u32)?;
+        self.pending_out_data
+            .write_u32(BinderDriverCommandProtocol::IncRefs as u32)?;
         self.pending_out_data.write_i32(handle)?;
 
         Ok(())
@@ -432,7 +470,8 @@ impl Binder {
     /// Decrement the server side reference count of the given handle. Note that this request is
     /// queued and only actually perfomed with the next outgoing transaction.
     pub fn dec_ref(&mut self, handle: i32) -> Result<(), Error> {
-        self.pending_out_data.write_u32(BinderDriverCommandProtocol::DecRefs as u32)?;
+        self.pending_out_data
+            .write_u32(BinderDriverCommandProtocol::DecRefs as u32)?;
         self.pending_out_data.write_i32(handle)?;
         Ok(())
     }
@@ -440,7 +479,8 @@ impl Binder {
     /// Acquire the server side resource for the given handle. Note that this request is
     /// queued and only actually perfomed with the next outgoing transaction.
     pub fn acquire(&mut self, handle: i32) -> Result<(), Error> {
-        self.pending_out_data.write_u32(BinderDriverCommandProtocol::Acquire as u32)?;
+        self.pending_out_data
+            .write_u32(BinderDriverCommandProtocol::Acquire as u32)?;
         self.pending_out_data.write_i32(handle)?;
         Ok(())
     }
@@ -448,14 +488,21 @@ impl Binder {
     /// Release the server side resource for the given handle. Note that this request is
     /// queued and only actually perfomed with the next outgoing transaction.
     pub fn release(&mut self, handle: i32) -> Result<(), Error> {
-        self.pending_out_data.write_u32(BinderDriverCommandProtocol::Release as u32)?;
+        self.pending_out_data
+            .write_u32(BinderDriverCommandProtocol::Release as u32)?;
         self.pending_out_data.write_i32(handle)?;
         Ok(())
     }
 
-    pub fn transact(&mut self, handle: i32, code: u32, flags: TransactionFlags, data: &mut Parcel) -> Result<(Option<BinderTransactionData>, Parcel), Error> {
-
-        self.pending_out_data.write_i32(BinderDriverCommandProtocol::Transaction as i32)?;
+    pub fn transact(
+        &mut self,
+        handle: i32,
+        code: u32,
+        flags: TransactionFlags,
+        data: &mut Parcel,
+    ) -> Result<(Option<BinderTransactionData>, Parcel), Error> {
+        self.pending_out_data
+            .write_i32(BinderDriverCommandProtocol::Transaction as i32)?;
 
         let transaction_data_out = BinderTransactionData {
             target: handle as u32,
@@ -466,17 +513,30 @@ impl Binder {
             sender_euid: 0,
             data_size: data.len() as u64,
             offset_size: (data.offsets_len() * size_of::<usize>()) as u64,
-            data: if !data.is_empty() { data.as_mut_ptr() } else { std::ptr::null_mut() },
-            offsets: if data.offsets_len() != 0 { data.offsets().as_mut_ptr() } else { std::ptr::null_mut() },
+            data: if !data.is_empty() {
+                data.as_mut_ptr()
+            } else {
+                std::ptr::null_mut()
+            },
+            offsets: if data.offsets_len() != 0 {
+                data.offsets().as_mut_ptr()
+            } else {
+                std::ptr::null_mut()
+            },
         };
-        self.pending_out_data.write_transaction_data(&transaction_data_out)?;
+        self.pending_out_data
+            .write_transaction_data(&transaction_data_out)?;
 
         self.do_write_read(&mut Parcel::empty())
     }
 
-    pub fn reply(&mut self, data: &mut Parcel, flags: TransactionFlags) -> Result<(Option<BinderTransactionData>, Parcel), Error> {
-
-        self.pending_out_data.write_i32(BinderDriverCommandProtocol::Reply as i32)?;
+    pub fn reply(
+        &mut self,
+        data: &mut Parcel,
+        flags: TransactionFlags,
+    ) -> Result<(Option<BinderTransactionData>, Parcel), Error> {
+        self.pending_out_data
+            .write_i32(BinderDriverCommandProtocol::Reply as i32)?;
 
         let transaction_data_out = BinderTransactionData {
             target: 0xffffffff,
@@ -487,15 +547,27 @@ impl Binder {
             sender_euid: 0,
             data_size: data.len() as u64,
             offset_size: (data.offsets_len() * size_of::<usize>()) as u64,
-            data: if !data.is_empty() { data.as_mut_ptr() } else { std::ptr::null_mut() },
-            offsets: if data.offsets_len() != 0 { data.offsets().as_mut_ptr() } else { std::ptr::null_mut() },
+            data: if !data.is_empty() {
+                data.as_mut_ptr()
+            } else {
+                std::ptr::null_mut()
+            },
+            offsets: if data.offsets_len() != 0 {
+                data.offsets().as_mut_ptr()
+            } else {
+                std::ptr::null_mut()
+            },
         };
-        self.pending_out_data.write_transaction_data(&transaction_data_out)?;
+        self.pending_out_data
+            .write_transaction_data(&transaction_data_out)?;
 
         self.do_write_read(&mut Parcel::empty())
     }
 
-    pub fn do_write_read(&mut self, parcel_out: &mut Parcel) -> Result<(Option<BinderTransactionData>, Parcel), Error> {
+    pub fn do_write_read(
+        &mut self,
+        parcel_out: &mut Parcel,
+    ) -> Result<(Option<BinderTransactionData>, Parcel), Error> {
         self.pending_out_data.append_parcel(parcel_out)?;
         let mut parcel_in = self.write_read(&self.pending_out_data, true);
         self.pending_out_data.reset();
@@ -503,50 +575,50 @@ impl Binder {
         self.proccess_incoming(&mut parcel_in)
     }
 
-    fn proccess_incoming(&mut self, parcel_in: &mut Parcel) -> Result<(Option<BinderTransactionData>, Parcel), Error> {
+    fn proccess_incoming(
+        &mut self,
+        parcel_in: &mut Parcel,
+    ) -> Result<(Option<BinderTransactionData>, Parcel), Error> {
         while parcel_in.has_unread_data() {
             let cmd_u32 = parcel_in.read_u32()?;
             let cmd_option = BinderDriverReturnProtocol::from_u32(cmd_u32);
             if let Some(cmd) = cmd_option {
                 match cmd {
-                    BinderDriverReturnProtocol::TransactionComplete => {},
+                    BinderDriverReturnProtocol::TransactionComplete => {}
                     BinderDriverReturnProtocol::DeadReply => {
                         panic!("Got a DEAD_REPLY");
-                    },
+                    }
                     BinderDriverReturnProtocol::FailedReply => {
                         panic!("Transaction failed");
-                    },
+                    }
                     BinderDriverReturnProtocol::IncRefs => {
                         log::info!("binder: IncRefs ******************");
-                    },
+                    }
                     BinderDriverReturnProtocol::Acquire => {
                         log::info!("binder: Acquire ******************");
-                    },
+                    }
                     BinderDriverReturnProtocol::AcquireResult => {
                         log::info!("binder: AcquireResult ****************");
                         parcel_in.read_i32()?;
-                    },
+                    }
                     BinderDriverReturnProtocol::Reply | BinderDriverReturnProtocol::Transaction => {
                         let transaction_data_in = parcel_in.read_transaction_data()?;
-                        let parcel = unsafe { Parcel::from_data_and_offsets(
+                        let parcel = unsafe {
+                            Parcel::from_data_and_offsets(
                                 transaction_data_in.data,
                                 transaction_data_in.data_size as usize,
                                 transaction_data_in.offsets,
-                                transaction_data_in.offset_size as usize / size_of::<usize>()
-                            ) };
-                        return Ok((
-                            Some(transaction_data_in),
-                            parcel,
-                        ));
-                    },
+                                transaction_data_in.offset_size as usize / size_of::<usize>(),
+                            )
+                        };
+                        return Ok((Some(transaction_data_in), parcel));
+                    }
                     BinderDriverReturnProtocol::Error => {
                         println!("Got an error {}", parcel_in.read_i32()?);
-                    },
-                    BinderDriverReturnProtocol::Noop => {
-                    },
-                    BinderDriverReturnProtocol::SpawnLooper => {
-                    },
-                    _  => {}
+                    }
+                    BinderDriverReturnProtocol::Noop => {}
+                    BinderDriverReturnProtocol::SpawnLooper => {}
+                    _ => {}
                 }
             }
         }
@@ -567,12 +639,11 @@ impl Binder {
         };
 
         unsafe {
-            binder_write_read(self.fd, &mut write_read_struct).expect("Failed to perform write_read");
+            binder_write_read(self.fd, &mut write_read_struct)
+                .expect("Failed to perform write_read");
         }
         Parcel::from_slice(&data_in[..write_read_struct.read_consumed])
-
     }
-
 }
 
 /// Implement Drop for Binder, so that we can clean up resources
@@ -585,4 +656,3 @@ impl Drop for Binder {
         close(self.fd).unwrap();
     }
 }
-
