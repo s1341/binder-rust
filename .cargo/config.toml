@@ -1,0 +1,5 @@
+[target.aarch64-linux-android]
+linker = "aarch64-linux-android34-clang"
+# rustflags = [
+#   "-C", "link-arg=-fuse-ld=lld",
+# ]
