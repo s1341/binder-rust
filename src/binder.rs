@@ -3,7 +3,7 @@ use parcelable_derive::Parcelable;
 
 use nix::{
     fcntl::{open, OFlag},
-    ioctl_readwrite, ioctl_write_int, ioctl_write_ptr,
+    ioctl_readwrite, ioctl_write_ptr,
     sys::{
         mman::{mmap, MapFlags, ProtFlags},
         stat::Mode,
@@ -17,7 +17,7 @@ use std::{
     mem::size_of,
     ops::BitOr,
     os::unix::io::RawFd,
-    ptr, slice,
+    ptr,
 };
 
 use num_traits::FromPrimitive;
@@ -29,7 +29,7 @@ const DEVICE: &str = "/dev/binder";
 const DEFAULT_MAX_BINDER_THREADS: u32 = 15;
 
 const PAGE_SIZE: usize = 0x1000;
-const BINDER_VM_SIZE: usize = (1 * 1024 * 1024) - PAGE_SIZE * 2;
+const BINDER_VM_SIZE: usize = (1024 * 1024) - PAGE_SIZE * 2;
 
 macro_rules! pack_chars {
     ($c1:expr, $c2:expr, $c3:expr, $c4:expr) => {
@@ -391,6 +391,12 @@ pub struct Binder {
     fd: RawFd,
     mem: *const c_void,
     pending_out_data: Parcel,
+}
+
+impl Default for Binder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Binder {

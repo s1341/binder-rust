@@ -3,14 +3,13 @@ use std::{
     fmt,
     io::{Cursor, Read, Write},
     mem::size_of,
-    mem::transmute,
     os::unix::io::RawFd,
     slice,
 };
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
-use crate::{Binder, BinderFlatObject, BinderTransactionData, BinderType, Error, Parcelable};
+use crate::{BinderFlatObject, BinderTransactionData, BinderType, Error, Parcelable};
 
 const STRICT_MODE_PENALTY_GATHER: i32 = 1 << 31;
 /// The header marker, packed["S", "Y", "S", "T"];
@@ -162,7 +161,7 @@ impl Parcel {
 
     /// Write an u8 to the parcel
     pub fn write_u8(&mut self, data: u8) -> Result<(), Error>{
-        self.cursor.write_u8(data as u8)?;
+        self.cursor.write_u8(data)?;
         Ok(())
     }
 
@@ -240,7 +239,7 @@ impl Parcel {
 
     /// Read a slice of size bytes from the parcel
     pub fn read(&mut self, size: usize) -> Result<Vec<u8>, Error> {
-        let size = if (size % 4) != 0 {
+        let size = if !size.is_multiple_of(4) {
             size + 4 - (size % 4)
         } else {
             size
@@ -259,7 +258,7 @@ impl Parcel {
 
     /// Read a BinderTransactionData from the parcel
     pub fn read_transaction_data(&mut self) -> Result<BinderTransactionData, Error> {
-        Ok(self.read_object()?)
+        self.read_object()
     }
 
     /// Read an object of type T from the parcel
@@ -294,7 +293,7 @@ impl Parcel {
         }
         s16.write_u16::<LittleEndian>(0)?;
 
-        if s16.len() % 4 != 0 {
+        if !s16.len().is_multiple_of(4) {
             s16.resize(s16.len() + 4 - (s16.len() % 4), 0);
         }
 
@@ -312,7 +311,7 @@ impl Parcel {
         }
         s8.push(0);
 
-        if s8.len() % 4 != 0 {
+        if !s8.len().is_multiple_of(4) {
             s8.resize(s8.len() + 4 - (s8.len() % 4), 0);
         }
 
@@ -347,7 +346,7 @@ impl Parcel {
             return Ok("".to_string())
         }
         unsafe {
-            let u16_array: Vec<u16> = self.read(len * 2)?.chunks_exact(2).into_iter().map(|a| u16::from_ne_bytes([a[0], a[1]])).collect();
+            let u16_array: Vec<u16> = self.read(len * 2)?.chunks_exact(2).map(|a| u16::from_ne_bytes([a[0], a[1]])).collect();
             let mut res = String::from_utf16(&u16_array)?;
             res.truncate(len - 1);
             Ok(res)
@@ -374,7 +373,7 @@ impl Parcel {
         self.read_i32()?;
         assert!(self.read_i32()? == -1);
         assert!(self.read_i32()? == HEADER);
-        Ok(self.read_str16()?)
+        self.read_str16()
     }
 
 
